@@ -40,7 +40,7 @@ namespace octet { namespace shaders {
         varying vec2 uv_;
         uniform sampler2D sampler;
         void main() { gl_FragColor = texture2D(sampler, uv_); }
-      );
+      );//ie everything inside SHADER_STR() is GLSL, NOT C
     
       // use the common shader code to compile and link the shaders
       // the result is a shader program

@@ -10,9 +10,6 @@
 #include "../../octet.h"
 
 #include "invaderers_app.h"
-//note: example_invaderers.h does NOTHING
-//this file is a /very/ basic instantiation file
-//the important parts are in invaderers_app.h and texture_shader.h
 
 /// Create a box with octet
 int main(int argc, char **argv) {

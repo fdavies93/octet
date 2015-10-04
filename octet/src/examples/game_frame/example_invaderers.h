@@ -6,16 +6,15 @@
 //
 namespace octet {
   /// Scene containing a box with octet.
- /*class example_invaderers : public app {
+  class example_invaderers : public app {
     // scene for drawing box
-    //ref<visual_scene> app_scene;
+    ref<visual_scene> app_scene;
   public:
     /// this is called when we construct the class before everything is initialised.
-    //example_invaderers(int argc, char **argv) : app(argc, argv) {
-    }*/
+    example_invaderers(int argc, char **argv) : app(argc, argv) {
+    }
 
-    /// everything below this does sweet FA in the actual invaderers app
-	/*
+    /// this is called once OpenGL is initialized
     void app_init() {
       app_scene =  new visual_scene();
       app_scene->create_default_camera_and_lights();
@@ -43,6 +42,6 @@ namespace octet {
       scene_node *node = app_scene->get_mesh_instance(0)->get_node();
       node->rotate(1, vec3(1, 0, 0));
       node->rotate(1, vec3(0, 1, 0));
-    }*/
+    }
   };
 }

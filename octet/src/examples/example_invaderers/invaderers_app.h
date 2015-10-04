@@ -212,7 +212,7 @@ namespace octet {
     void on_hit_invaderer() {
       ALuint source = get_sound_source();
       alSourcei(source, AL_BUFFER, bang);
-      alSourcePlay(source);
+      //alSourcePlay(source);
 
       live_invaderers--;
       score++;
@@ -228,7 +228,7 @@ namespace octet {
     void on_hit_ship() {
       ALuint source = get_sound_source();
       alSourcei(source, AL_BUFFER, bang);
-      alSourcePlay(source);
+      //alSourcePlay(source);
 
       if (--num_lives == 0) {
         game_over = true;
@@ -266,7 +266,7 @@ namespace octet {
             missiles_disabled = 5;
             ALuint source = get_sound_source();
             alSourcei(source, AL_BUFFER, whoosh);
-            alSourcePlay(source);
+            //alSourcePlay(source);
             break;
           }
         }
@@ -291,7 +291,7 @@ namespace octet {
                 bombs_disabled = 30;
                 ALuint source = get_sound_source();
                 alSourcei(source, AL_BUFFER, whoosh);
-                alSourcePlay(source);
+                //alSourcePlay(source);
                 return;
               }
             }
