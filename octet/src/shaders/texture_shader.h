@@ -30,7 +30,7 @@ namespace octet { namespace shaders {
         uniform mat4 modelToProjection;
 
         void main() { gl_Position = modelToProjection * pos; uv_ = uv; }
-      );
+      );//all the above is GLSL
 
       // this is the fragment shader
       // after the rasterizer breaks the triangle into fragments
