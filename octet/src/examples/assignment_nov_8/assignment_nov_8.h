@@ -6,6 +6,21 @@
 //
 namespace octet {
   /// Scene containing a box with octet.
+
+	class sprite {
+		//as in example_invaderers, used for rendering and not much else
+		float width;
+		float height;
+		bool visible;//whether to render
+		int texture;
+	};
+
+	class gameObject {
+
+
+	};
+
+
   class assignment_nov_8 : public app {
     // scene for drawing box
     ref<visual_scene> app_scene;

@@ -40,11 +40,11 @@ namespace octet {
     }
 
     void init(int _texture, float x, float y, float w, float h) {
-      modelToWorld.loadIdentity();
-      modelToWorld.translate(x, y, 0);
-      halfWidth = w * 0.5f;
+      modelToWorld.loadIdentity();//resets matrix position to origin, i.e. [0,0,0]
+      modelToWorld.translate(x, y, 0);//translate by x,y and not at all on the z-plane
+      halfWidth = w * 0.5f;//obvious
       halfHeight = h * 0.5f;
-      texture = _texture;
+      texture = _texture;//basically just the index of the texture; set in app init
       enabled = true;
     }
 
@@ -57,13 +57,14 @@ namespace octet {
       mat4t modelToProjection = mat4t::build_projection_matrix(modelToWorld, cameraToWorld);
 
       // set up opengl to draw textured triangles using sampler 0 (GL_TEXTURE0)
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, texture);
+      glActiveTexture(GL_TEXTURE0);//makes GL_TEXTURE0 the active texture
+      glBindTexture(GL_TEXTURE_2D, texture);//from openGL api, binds the texture under index texture to the active texture
 
       // use "old skool" rendering
       //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
       //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
       shader.render(modelToProjection, 0);
+	  //^ treat this as essentially a black box for now; shader code can be dealt with after the basic code is set up
 
       // this is an array of the positions of the corners of the sprite in 3D
       // a straight "float" here means this array is being generated here at runtime.
@@ -77,23 +78,26 @@ namespace octet {
       // attribute_pos (=0) is position of each corner
       // each corner has 3 floats (x, y, z)
       // there is no gap between the 3 floats and hence the stride is 3*sizeof(float)
+	  // 'stride' means span of data from pointer of each 'cell' in vertex
       glVertexAttribPointer(attribute_pos, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)vertices );
+	  // ^ index; size; type; whether normalized; size of array; and array of vertices, cast to a void pointer
       glEnableVertexAttribArray(attribute_pos);
-    
-      // this is an array of the positions of the corners of the texture in 2D
-      static const float uvs[] = {
+	  // ^ uses current vertex attrib (i.e. vertices) and enables their use for rendering texture
+      // v this is an array of the positions of the corners of the texture in 2D
+      
+	  static const float uvs[] = {
          0,  0,
          1,  0,
          1,  1,
          0,  1,
-      };
+      };//essentially vertices normalised relative to size of sprite
 
       // attribute_uv is position in the texture of each corner
       // each corner (vertex) has 2 floats (x, y)
       // there is no gap between the 2 floats and hence the stride is 2*sizeof(float)
       glVertexAttribPointer(attribute_uv, 2, GL_FLOAT, GL_FALSE, 2*sizeof(float), (void*)uvs );
       glEnableVertexAttribArray(attribute_uv);
-    
+	  //^ as above, simply casting uvs into attribute_uv
       // finally, draw the sprite (4 vertices)
       glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
     }
