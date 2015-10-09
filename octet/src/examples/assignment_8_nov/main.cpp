@@ -10,6 +10,7 @@
 #define OCTET_BULLET 1
 
 #include <iostream>
+#include <string>
 
 #include "../../octet.h"
 

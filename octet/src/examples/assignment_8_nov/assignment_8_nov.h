@@ -140,18 +140,41 @@ namespace octet {
 		}
 	};
 
-	//stores and manages sprites
+	struct sprite_type_data
+	{
+		//basic initialisation stuff
+		int _texture;
+		float w;
+		float h;
+	};
+
+
+	//stores and manages sprites using type data
 	class sprite_manager
 	{
-		enum {
+		enum constants {
 			max_sprites = 256,
 		};
+
+		enum sprite_types {
+			invaderer = 0,
+			type_number = 1,
+		};
+
 		sprite dummy;
 		sprite contained_sprites[max_sprites];
+		sprite_type_data type_data[type_number];
+		std::map<string, int> type_map;
 		ALuint enabled_sprites;
 	public:
 		sprite_manager()
 		{
+			type_map.emplace("invaderer", invaderer);
+		}
+
+		void init()
+		{
+
 		}
 		
 		//checks memory references for a fairly safe way of testing for null returns	
@@ -203,6 +226,14 @@ namespace octet {
 				}
 			}
 			else return dummy;
+		}
+
+		void render_all(texture_shader &shader, mat4t &cameraToWorld)
+		{
+			for (ALuint cur_sprite = 0; cur_sprite < max_sprites; cur_sprite++)
+			{
+				contained_sprites[cur_sprite].render(shader, cameraToWorld);
+			}
 		}
 	};
 
