@@ -9,6 +9,8 @@
 
 #define OCTET_BULLET 1
 
+#include <iostream>
+
 #include "../../octet.h"
 
 #include "assignment_8_nov.h"

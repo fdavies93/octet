@@ -36,7 +36,7 @@ namespace octet {
 	public:
 		sprite() {
 			texture = 0;
-			enabled = true;
+			enabled = false;
 		}
 
 		void init(int _texture, float x, float y, float w, float h) {
@@ -137,6 +137,72 @@ namespace octet {
 
 		bool &is_enabled() {
 			return enabled;
+		}
+	};
+
+	//stores and manages sprites
+	class sprite_manager
+	{
+		enum {
+			max_sprites = 256,
+		};
+		sprite dummy;
+		sprite contained_sprites[max_sprites];
+		ALuint enabled_sprites;
+	public:
+		sprite_manager()
+		{
+		}
+		
+		//checks memory references for a fairly safe way of testing for null returns	
+		bool is_dummy(sprite possible_dummy)
+		{
+			return &dummy == &possible_dummy;
+		}
+
+		//initialises and enables a sprite as long as there's space, returns reference
+		//if there isn't, returns the dummy sprite
+		sprite &add_sprite(int _texture, float x, float y, float w, float h)
+		{
+			ALuint cur_sprite = 0;
+			while(cur_sprite < max_sprites){
+				if (!contained_sprites[cur_sprite].is_enabled()) {
+					contained_sprites[cur_sprite].init(_texture, x, y, w, h);
+					break;
+				}
+			cur_sprite++;
+			}
+			if (cur_sprite < max_sprites) return contained_sprites[cur_sprite];
+			else return dummy;
+		}
+
+		//'removes' (i.e. disables and allows overwrites of) the sprite referenced then 
+		//returns whether it was found and removed successfully
+		bool remove_sprite(sprite &toRemove)
+		{
+			ALuint cur_sprite = 0;
+			while (cur_sprite < max_sprites)
+			{
+				if (&contained_sprites[cur_sprite] == &toRemove)
+				{
+					toRemove.is_enabled = false;
+					break;
+				}
+			}
+			if (cur_sprite < max_sprites) return true;
+			else return false;
+		}
+
+		//returns sprite by index; if not found, returns dummy
+		sprite &get_sprite_by_index(ALuint index)
+		{
+			if (index >= -1 && index < max_sprites) {
+				if (contained_sprites[index].is_enabled())
+				{
+					return contained_sprites[index];
+				}
+			}
+			else return dummy;
 		}
 	};
 
@@ -382,7 +448,6 @@ namespace octet {
 			return false;
 		}
 
-
 		void draw_text(texture_shader &shader, float x, float y, float scale, const char *text) {
 			mat4t modelToWorld;
 			modelToWorld.loadIdentity();
@@ -425,6 +490,7 @@ namespace octet {
 		// this is called once OpenGL is initialized
 		void app_init() {
 			// set up the shader
+
 			texture_shader_.init();
 
 			// set up the matrices with a camera 5 units from the origin
