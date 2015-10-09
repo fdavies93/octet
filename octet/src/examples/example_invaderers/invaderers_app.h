@@ -57,7 +57,7 @@ namespace octet {
       mat4t modelToProjection = mat4t::build_projection_matrix(modelToWorld, cameraToWorld);
 
       // set up opengl to draw textured triangles using sampler 0 (GL_TEXTURE0)
-      glActiveTexture(GL_TEXTURE0);//makes GL_TEXTURE0 the active texture
+      glActiveTexture(GL_TEXTURE0);//makes GL_TEXTURE0 the active (draw) texture
       glBindTexture(GL_TEXTURE_2D, texture);//from openGL api, binds the texture under index texture to the active texture
 
       // use "old skool" rendering
@@ -90,7 +90,7 @@ namespace octet {
          1,  0,
          1,  1,
          0,  1,
-      };//essentially vertices normalised relative to size of sprite
+      };//essentially vertices normalised relative to size of sprite on texture
 
       // attribute_uv is position in the texture of each corner
       // each corner (vertex) has 2 floats (x, y)
@@ -249,12 +249,14 @@ namespace octet {
         if (sprites[ship_sprite].collides_with(sprites[first_border_sprite+2])) {
           sprites[ship_sprite].translate(+ship_speed, 0);
         }
-      } else if (is_key_down(key_right)) {
+      } 
+	  else if (is_key_down(key_right)) {
         sprites[ship_sprite].translate(+ship_speed, 0);
         if (sprites[ship_sprite].collides_with(sprites[first_border_sprite+3])) {
           sprites[ship_sprite].translate(-ship_speed, 0);
         }
       }
+
     }
 
     // fire button (space)
@@ -441,6 +443,7 @@ namespace octet {
           sprites[first_invaderer_sprite + i + j*num_cols].init(
             invaderer, ((float)i - num_cols * 0.5f) * 0.5f, 2.50f - ((float)j * 0.5f), 0.25f, 0.25f
           );
+		  //0.25f seems to render at 1:1 scale; I wonder why this is? probably camera being placed 3 units away
         }
       }
 

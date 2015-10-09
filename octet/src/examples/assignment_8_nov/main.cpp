@@ -11,7 +11,7 @@
 
 #include "../../octet.h"
 
-#include "assignment_nov_8.h"
+#include "assignment_8_nov.h"
 
 /// Create a box with octet
 int main(int argc, char **argv) {
@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
   octet::app::init_all(argc, argv);
 
   // our application.
-  octet::assignment_nov_8 app(argc, argv);
+  octet::assignment_8_nov app(argc, argv);
   app.init();
 
   // open windows

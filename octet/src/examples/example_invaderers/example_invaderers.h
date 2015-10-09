@@ -44,5 +44,5 @@ namespace octet {
       node->rotate(1, vec3(1, 0, 0));
       node->rotate(1, vec3(0, 1, 0));
     }*/
-  };
+  //};
 }
