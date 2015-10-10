@@ -18,6 +18,17 @@
 //
 
 namespace octet {
+
+	enum constants {
+		max_sprites = 256,
+	};
+
+	enum sprite_types {
+		type_null = -1,
+		invaderer = 0,
+		type_number = 1,
+	};
+
 	class sprite {
 		// where is our sprite (overkill for a 2D game!)
 		mat4t modelToWorld;
@@ -33,9 +44,12 @@ namespace octet {
 
 		// true if this sprite is enabled.
 		bool enabled;
+
+		sprite_types type;
 	public:
 		sprite() {
 			texture = 0;
+			type = sprite_types::type_null;
 			enabled = false;
 		}
 
@@ -138,6 +152,11 @@ namespace octet {
 		bool &is_enabled() {
 			return enabled;
 		}
+
+		sprite_types &get_type()
+		{
+			return type;
+		}
 	};
 
 	struct sprite_type_data
@@ -146,35 +165,31 @@ namespace octet {
 		int _texture;
 		float w;
 		float h;
+		bool collides;
 	};
 
-
-	//stores and manages sprites using type data
-	class sprite_manager
-	{
-		enum constants {
-			max_sprites = 256,
-		};
-
-		enum sprite_types {
-			invaderer = 0,
-			type_number = 1,
-		};
+	//stores and manages game data in convenient ways
+	class game_manager
+	{		
+	private:
 
 		sprite dummy;
 		sprite contained_sprites[max_sprites];
-		sprite_type_data type_data[type_number];
-		std::map<string, int> type_map;
-		ALuint enabled_sprites;
+		sprite_type_data sprite_data[type_number];
+		std::vector<sprite*> colliding_sprites;
 	public:
-		sprite_manager()
+
+		game_manager()
 		{
-			type_map.emplace("invaderer", invaderer);
+			
 		}
 
 		void init()
 		{
-
+			sprite_data[invaderer].h = 0.25f;
+			sprite_data[invaderer].w = 0.25f;
+			sprite_data[invaderer]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/invaderers/invaderer.gif");
+			sprite_data[invaderer].collides = true;
 		}
 		
 		//checks memory references for a fairly safe way of testing for null returns	
@@ -185,12 +200,13 @@ namespace octet {
 
 		//initialises and enables a sprite as long as there's space, returns reference
 		//if there isn't, returns the dummy sprite
-		sprite &add_sprite(int _texture, float x, float y, float w, float h)
+		sprite &add_sprite(int _texture, float x, float y, float w, float h, sprite_types type)
 		{
 			ALuint cur_sprite = 0;
 			while(cur_sprite < max_sprites){
 				if (!contained_sprites[cur_sprite].is_enabled()) {
 					contained_sprites[cur_sprite].init(_texture, x, y, w, h);
+					contained_sprites[cur_sprite].get_type() = type;
 					break;
 				}
 			cur_sprite++;
@@ -208,7 +224,15 @@ namespace octet {
 			{
 				if (&contained_sprites[cur_sprite] == &toRemove)
 				{
-					toRemove.is_enabled = false;
+					toRemove.is_enabled() = false;
+					if (sprite_data[contained_sprites[cur_sprite].get_type()].collides)
+					{
+						for (ALuint cur_collider = 0; cur_collider < colliding_sprites.size(); cur_collider++)
+						{
+							if (colliding_sprites[cur_collider] == &toRemove)
+								colliding_sprites.erase(colliding_sprites.begin() + cur_collider);
+						}
+					}
 					break;
 				}
 			}
@@ -228,11 +252,25 @@ namespace octet {
 			else return dummy;
 		}
 
+		//makes adding generic objects much easier by abstracting out their data
+		sprite &add_sprite_by_type(sprite_types type, float x, float y)
+		{
+			sprite& sprite_added = add_sprite(sprite_data[type]._texture, x, y, sprite_data[type].w, sprite_data[type].h, type);
+			if (!is_dummy(sprite_added))
+			{
+				colliding_sprites.push_back(&sprite_added);
+			}
+			return sprite_added;
+		}
+
 		void render_all(texture_shader &shader, mat4t &cameraToWorld)
 		{
 			for (ALuint cur_sprite = 0; cur_sprite < max_sprites; cur_sprite++)
 			{
-				contained_sprites[cur_sprite].render(shader, cameraToWorld);
+				if (contained_sprites[cur_sprite].is_enabled())
+				{
+					contained_sprites[cur_sprite].render(shader, cameraToWorld);
+				}
 			}
 		}
 	};
@@ -514,6 +552,7 @@ namespace octet {
 
 	public:
 
+		game_manager manager;
 		// this is called when we construct the class
 		assignment_8_nov(int argc, char **argv) : app(argc, argv), font(512, 256, "assets/big.fnt") {
 		}
@@ -524,6 +563,8 @@ namespace octet {
 
 			texture_shader_.init();
 
+			manager.init();
+
 			// set up the matrices with a camera 5 units from the origin
 			cameraToWorld.loadIdentity();
 			cameraToWorld.translate(0, 0, 3);
@@ -532,6 +573,8 @@ namespace octet {
 
 			GLuint ship = resource_dict::get_texture_handle(GL_RGBA, "assets/invaderers/ship.gif");
 			sprites[ship_sprite].init(ship, 0, -2.75f, 0.25f, 0.25f);
+
+			//manager.add_sprite(ship, 0, -2.75f, 0.25f, 0.25f);
 
 			GLuint GameOver = resource_dict::get_texture_handle(GL_RGBA, "assets/invaderers/GameOver.gif");
 			sprites[game_over_sprite].init(GameOver, 20, 0, 3, 1.5f);
@@ -546,6 +589,8 @@ namespace octet {
 					//0.25f seems to render at 1:1 scale; I wonder why this is? probably camera being placed 3 units away
 				}
 			}
+
+			std::cout << manager.remove_sprite(manager.add_sprite_by_type(sprite_types::invaderer, 0, -2.75f)) << "\n";
 
 			// set the border to white for clarity
 			GLuint white = resource_dict::get_texture_handle(GL_RGB, "#ffffff");
@@ -633,6 +678,7 @@ namespace octet {
 			for (int i = 0; i != num_sprites; ++i) {
 				sprites[i].render(texture_shader_, cameraToWorld);
 			}
+			manager.render_all(texture_shader_, cameraToWorld);
 
 			char score_text[32];
 			sprintf(score_text, "score: %d   lives: %d\n", score, num_lives);
