@@ -176,7 +176,7 @@ namespace octet {
 		sprite dummy;
 		sprite contained_sprites[max_sprites];
 		sprite_type_data sprite_data[type_number];
-		std::vector<sprite*> colliding_sprites;
+		std::list<sprite*> colliding_sprites;//change to list
 	public:
 
 		game_manager()
@@ -207,6 +207,7 @@ namespace octet {
 				if (!contained_sprites[cur_sprite].is_enabled()) {
 					contained_sprites[cur_sprite].init(_texture, x, y, w, h);
 					contained_sprites[cur_sprite].get_type() = type;
+					if (sprite_data[type].collides) colliding_sprites.push_back(&contained_sprites[cur_sprite]);
 					break;
 				}
 			cur_sprite++;
@@ -227,10 +228,14 @@ namespace octet {
 					toRemove.is_enabled() = false;
 					if (sprite_data[contained_sprites[cur_sprite].get_type()].collides)
 					{
-						for (ALuint cur_collider = 0; cur_collider < colliding_sprites.size(); cur_collider++)
+						std::list<sprite*>::iterator cur_collider = colliding_sprites.begin();
+						while (cur_collider != colliding_sprites.end())
 						{
-							if (colliding_sprites[cur_collider] == &toRemove)
-								colliding_sprites.erase(colliding_sprites.begin() + cur_collider);
+							if (*cur_collider == &toRemove) {
+								colliding_sprites.erase(cur_collider);
+								break;
+							}
+							else ++cur_collider;
 						}
 					}
 					break;
@@ -255,12 +260,7 @@ namespace octet {
 		//makes adding generic objects much easier by abstracting out their data
 		sprite &add_sprite_by_type(sprite_types type, float x, float y)
 		{
-			sprite& sprite_added = add_sprite(sprite_data[type]._texture, x, y, sprite_data[type].w, sprite_data[type].h, type);
-			if (!is_dummy(sprite_added))
-			{
-				colliding_sprites.push_back(&sprite_added);
-			}
-			return sprite_added;
+			return add_sprite(sprite_data[type]._texture, x, y, sprite_data[type].w, sprite_data[type].h, type);
 		}
 
 		void render_all(texture_shader &shader, mat4t &cameraToWorld)
