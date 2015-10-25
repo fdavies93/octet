@@ -231,6 +231,8 @@ namespace octet {
 		const float PLAYER_SPEED = 0.05f;
 		const float BULLET_BUFFER = 0.1f;
 		const float BULLET_SPEED = 0.1f;
+		const float ENEMY_SPEED = 0.05f;
+		const float ENEMY_TURN_CHANCE = 0.05f;//in percent
 
 		octet::app* myApp;
 		sprite dummy;
@@ -243,6 +245,7 @@ namespace octet {
 		std::vector<sprite*> removal_list;
 		texture_shader *shader;
 		mat4t *worldCamera;
+		math::random randomiser;
 		
 
 	public:
@@ -290,6 +293,9 @@ namespace octet {
 			//...and sounds
 			cur_sound_source = 0;
 			alGenSources(num_sound_sources, sound_sources);
+
+			//and misc
+			randomiser.set_seed(210893U);
 		}
 
 		void playSound(string fileName)
@@ -452,11 +458,41 @@ namespace octet {
 					playSound("assets/invaderers/bang.wav");
 				}*/
 			}
-			if (object.get_type() == sprite_types::bullet) {
+			else if (object.get_type() == sprite_types::enemy) {
+				switch (object.facing){
+				case sprite_directions::UP:
+					object.translate(0, ENEMY_SPEED);
+					break;
+				case sprite_directions::DOWN:
+					object.translate(0, -ENEMY_SPEED);
+					break;
+				case sprite_directions::LEFT:
+					object.translate(-ENEMY_SPEED, 0);
+					break;
+				case sprite_directions::RIGHT:
+					object.translate(ENEMY_SPEED, 0);
+					break;
+				}
+				
+				float will_turn = randomiser.get(0.0f, 1.0f);
+				if (will_turn < ENEMY_TURN_CHANCE)
+				{
+					float turn_direction = randomiser.get(0.0f, 1.0f);
+					if (turn_direction < 0.25f) object.facing = sprite_directions::UP;
+					else if (turn_direction < 0.5f) object.facing = sprite_directions::DOWN;
+					else if (turn_direction < 0.75f) object.facing = sprite_directions::LEFT;
+					else if (turn_direction < 1.0f) object.facing = sprite_directions::RIGHT;
+				}
+			}
+			else if (object.get_type() == sprite_types::bullet) {
 				if (object.facing == sprite_directions::UP) object.translate(0, BULLET_SPEED);
 				if (object.facing == sprite_directions::DOWN) object.translate(0, -BULLET_SPEED);
 				if (object.facing == sprite_directions::LEFT) object.translate(-BULLET_SPEED, 0);
 				if (object.facing == sprite_directions::RIGHT) object.translate(BULLET_SPEED, 0);
+				if (object.getX() < -3.0f || object.getX() > 3.0f || object.getY() > 3.0f || object.getY() < -3.0f)
+				{
+					removal_list.push_back(&object);
+				}
 			}
 		}
 
@@ -471,19 +507,28 @@ namespace octet {
 
 		void resolveCollision(sprite &subject, sprite &object)
 		{
-			if (subject.get_type() == sprite_types::player && object.get_type() == sprite_types::player)
+			//note: subject is always the thing ACTING UPON the object
+			if (subject.get_type() == sprite_types::rock)
 			{
-				//printf("Testing...");
+				if(object.get_type() == sprite_types::bullet) removal_list.push_back(&object);
+				else if (object.get_type() == sprite_types::player || object.get_type() == sprite_types::enemy)
+				{
+					object.reset_position();
+					object.translate(object.getPrevX(), object.getPrevY());
+					//i.e. move it back to its previous location
+				}
 			}
-			if (subject.get_type() == sprite_types::rock && object.get_type() == sprite_types::bullet)
+			else if (subject.get_type() == sprite_types::bullet)
 			{
-				removal_list.push_back(&object);
+
 			}
-			if (subject.get_type() == sprite_types::rock && (object.get_type() == sprite_types::player || object.get_type() == sprite_types::enemy))
+			else if (subject.get_type() == sprite_types::enemy)
 			{
-				object.reset_position();
-				object.translate(object.getPrevX(), object.getPrevY());
-				//i.e. move it back to its previous location
+				if (object.get_type() == sprite_types::enemy)
+				{
+					object.reset_position();
+					object.translate(object.getPrevX(),object.getPrevY());
+				}
 			}
 		}
 
@@ -497,7 +542,7 @@ namespace octet {
 				for (sprite2_i = colliding_sprites.begin(); sprite2_i != colliding_sprites.end(); ++sprite2_i)
 				{
 					sprite2 = &contained_sprites[*sprite2_i];
-					if (sprite1->collides_with(*sprite2)) resolveCollision(*sprite1, *sprite2);
+					if (sprite1->collides_with(*sprite2) && sprite1 != sprite2) resolveCollision(*sprite1, *sprite2);
 				}
 			}
 		}
@@ -615,14 +660,18 @@ namespace octet {
 			//right
 			for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, -2.75f, i);
 
-			for (float x = -2.75f; x <= 2.75f; x += 0.25f)
+			/*for (float x = -2.75f; x <= 2.75f; x += 0.25f)
 			{
 				for (float y = -2.75f; y <= 2.75f; y += 0.25f)
 				{
 					manager.add_sprite_by_type(sprite_types::ground, x, y);
 				}
-			}
-			//manager.add_sprite_by_type(sprite_types::invaderer, 0, -1.75f);
+			}*/
+			manager.add_sprite_by_type(sprite_types::enemy, 0, -1.75f);
+			manager.add_sprite_by_type(sprite_types::enemy, -1.75f, -1.75f);
+			manager.add_sprite_by_type(sprite_types::enemy, 1.75f, 1.75f);
+			manager.add_sprite_by_type(sprite_types::enemy, 0, 1.75f);
+			//manager.add_sprite_by_type(sprite_types::enemy, -1.75f, -1.75f);
 		}
 
 		// called every frame to move things
