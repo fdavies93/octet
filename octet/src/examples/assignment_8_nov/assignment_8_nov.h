@@ -20,14 +20,25 @@
 namespace octet {
 
 	enum constants {
-		max_sprites = 256,
+		max_sprites = 1024,
 		num_sound_sources = 16,
 	};
 
 	enum sprite_types {
 		type_null = -1,
-		invaderer = 0,
-		type_number = 1,
+		player = 0,
+		enemy = 1,
+		bullet = 2,
+		rock = 3,
+		ground = 4,
+		type_number = 5,
+	};
+
+	enum sprite_directions {
+		LEFT,
+		RIGHT,
+		UP,
+		DOWN,
 	};
 
 	class sprite {
@@ -46,12 +57,18 @@ namespace octet {
 		// true if this sprite is enabled.
 		bool enabled;
 
+		float prevX;
+		float prevY;
+
 		sprite_types type;
 	public:
+		sprite_directions facing;
+
 		sprite() {
 			texture = 0;
 			type = sprite_types::type_null;
 			enabled = false;
+			facing = sprite_directions::DOWN;
 		}
 
 		void init(int _texture, float x, float y, float w, float h) {
@@ -59,6 +76,8 @@ namespace octet {
 			modelToWorld.translate(x, y, 0);//translate by x,y and not at all on the z-plane
 			halfWidth = w * 0.5f;//obvious
 			halfHeight = h * 0.5f;
+			prevX = 0;
+			prevY = 0;
 			texture = _texture;//basically just the index of the texture; set in app init
 			enabled = true;
 		}
@@ -117,8 +136,16 @@ namespace octet {
 			glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 		}
 
+		//reset position (to 0,0)
+		void reset_position()
+		{
+			modelToWorld.loadIdentity();
+		}
+
 		// move the object
 		void translate(float x, float y) {
+			prevX = modelToWorld[3][0];
+			prevY = modelToWorld[3][1];
 			modelToWorld.translate(x, y, 0);
 		}
 
@@ -158,6 +185,34 @@ namespace octet {
 		{
 			return type;
 		}
+
+		float getX(){
+			return modelToWorld[3][0];
+		}
+
+		float getY(){
+			return modelToWorld[3][1];
+		}
+
+		float getPrevX()
+		{
+			return prevX;
+		}
+
+		float getPrevY()
+		{
+			return prevY;
+		}
+
+		float getHalfWidth()
+		{
+			return halfWidth;
+		}
+
+		float getHalfHeight()
+		{
+			return halfHeight;
+		}
 	};
 
 	struct sprite_type_data
@@ -174,6 +229,8 @@ namespace octet {
 	{		
 	private:
 		const float PLAYER_SPEED = 0.05f;
+		const float BULLET_BUFFER = 0.1f;
+		const float BULLET_SPEED = 0.1f;
 
 		octet::app* myApp;
 		sprite dummy;
@@ -183,6 +240,7 @@ namespace octet {
 		sprite_type_data sprite_data[type_number];
 		std::list<int> colliding_sprites;//change to list
 		std::list<int> background_sprites;
+		std::vector<sprite*> removal_list;
 		texture_shader *shader;
 		mat4t *worldCamera;
 		
@@ -203,10 +261,31 @@ namespace octet {
 			worldCamera = &cameraToWorld;
 
 			//setting up sprite data
-			sprite_data[invaderer].h = 0.25f;
-			sprite_data[invaderer].w = 0.25f;
-			sprite_data[invaderer]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/invaderers/invaderer.gif");
-			sprite_data[invaderer].collides = true;
+			//player, enemy, rock, bullet, ground
+			sprite_data[player].h = 0.25f;
+			sprite_data[player].w = 0.25f;// = 32px
+			sprite_data[player]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/player.gif");
+			sprite_data[player].collides = true;
+
+			sprite_data[enemy].h = 0.25f;
+			sprite_data[enemy].w = 0.25f;
+			sprite_data[enemy]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/enemy.gif");
+			sprite_data[enemy].collides = true;
+
+			sprite_data[rock].h = 0.25f;
+			sprite_data[rock].w = 0.25f;
+			sprite_data[rock]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/rock.gif");
+			sprite_data[rock].collides = true;
+
+			sprite_data[bullet].h = 0.0625f;
+			sprite_data[bullet].w = 0.0625f;
+			sprite_data[bullet]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/bullet.gif");
+			sprite_data[bullet].collides = true;
+
+			sprite_data[ground].h = 0.25f;
+			sprite_data[ground].w = 0.25f;
+			sprite_data[ground]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/ground.gif");
+			sprite_data[ground].collides = false;
 
 			//...and sounds
 			cur_sound_source = 0;
@@ -285,6 +364,7 @@ namespace octet {
 					}
 					break;
 				}
+				++cur_sprite;
 			}
 			if (cur_sprite < max_sprites) return true;
 			else return false;
@@ -326,17 +406,57 @@ namespace octet {
 
 		void simulateObject(sprite &object)
 		{
-			if (object.get_type() == sprite_types::invaderer)
+			if (object.get_type() == sprite_types::player)
 			{
-				if (myApp->is_key_down(key_down)) {
-					object.translate(0, -0.05f);
+				//note: all is_key_downs take capital letters
+				if (myApp->is_key_down('S')){
+					object.translate(0, -PLAYER_SPEED);
+					object.facing = sprite_directions::DOWN;
 				}
-				else if (myApp->is_key_down(key_up)) {
-					object.translate(0, 0.05f);
+				else if (myApp->is_key_down('W')) {
+					object.translate(0, PLAYER_SPEED);
+					object.facing = sprite_directions::UP;
 				}
-				else if (myApp->is_key_down(key_ctrl)) {
+				else if (myApp->is_key_down('A')) {
+					object.translate(-PLAYER_SPEED, 0);
+					object.facing = sprite_directions::LEFT;
+				}
+				else if (myApp->is_key_down('D')) {
+					object.translate(PLAYER_SPEED, 0);
+					object.facing = sprite_directions::RIGHT;
+				}
+				if (myApp->is_key_going_down(' '))
+				{
+					sprite* newBullet;
+					switch (object.facing)
+					{
+					case sprite_directions::UP:
+						newBullet = &add_sprite_by_type(sprite_types::bullet, object.getX(), object.getY() + object.getHalfHeight() + BULLET_BUFFER);
+						newBullet->facing = sprite_directions::UP;
+						break;
+					case sprite_directions::DOWN:
+						newBullet = &add_sprite_by_type(sprite_types::bullet, object.getX(), object.getY() - object.getHalfHeight() - BULLET_BUFFER);
+						newBullet->facing = sprite_directions::DOWN;
+						break;
+					case sprite_directions::LEFT:
+						newBullet = &add_sprite_by_type(sprite_types::bullet, object.getX() - object.getHalfWidth() - BULLET_BUFFER, object.getY());
+						newBullet->facing = sprite_directions::LEFT;
+						break;
+					case sprite_directions::RIGHT:
+						newBullet = &add_sprite_by_type(sprite_types::bullet, object.getX() + object.getHalfWidth() + BULLET_BUFFER, object.getY());
+						newBullet->facing = sprite_directions::RIGHT;
+						break;
+					}
+				}
+				/*if (myApp->is_key_going_down(key_ctrl)) {
 					playSound("assets/invaderers/bang.wav");
-				}
+				}*/
+			}
+			if (object.get_type() == sprite_types::bullet) {
+				if (object.facing == sprite_directions::UP) object.translate(0, BULLET_SPEED);
+				if (object.facing == sprite_directions::DOWN) object.translate(0, -BULLET_SPEED);
+				if (object.facing == sprite_directions::LEFT) object.translate(-BULLET_SPEED, 0);
+				if (object.facing == sprite_directions::RIGHT) object.translate(BULLET_SPEED, 0);
 			}
 		}
 
@@ -351,9 +471,19 @@ namespace octet {
 
 		void resolveCollision(sprite &subject, sprite &object)
 		{
-			if (subject.get_type() == sprite_types::invaderer && object.get_type() == sprite_types::invaderer)
+			if (subject.get_type() == sprite_types::player && object.get_type() == sprite_types::player)
 			{
 				//printf("Testing...");
+			}
+			if (subject.get_type() == sprite_types::rock && object.get_type() == sprite_types::bullet)
+			{
+				removal_list.push_back(&object);
+			}
+			if (subject.get_type() == sprite_types::rock && (object.get_type() == sprite_types::player || object.get_type() == sprite_types::enemy))
+			{
+				object.reset_position();
+				object.translate(object.getPrevX(), object.getPrevY());
+				//i.e. move it back to its previous location
 			}
 		}
 
@@ -372,12 +502,26 @@ namespace octet {
 			}
 		}
 
+		void removeDeadObjects()
+		{
+			for (ALuint i = 0; i < removal_list.size(); ++i)
+			{
+				remove_sprite(*removal_list[i]);
+			}
+			for (ALuint i = 0; i < removal_list.size(); ++i)
+			{
+				removal_list.pop_back();
+			}
+		}
+
 		void simulate()
 		{
 			//move objects
 			simulateObjects();
 			//resolve collisions
 			checkCollisions();
+			//remove objects on remove list
+			removeDeadObjects();
 		}
 
 		void update()
@@ -459,8 +603,26 @@ namespace octet {
 
 			font_texture = resource_dict::get_texture_handle(GL_RGBA, "assets/big_0.gif");
 
-			manager.add_sprite_by_type(sprite_types::invaderer, 0, -2.75f);
-			manager.add_sprite_by_type(sprite_types::invaderer, 0, -2.75f);
+			manager.add_sprite_by_type(sprite_types::player, 0, 0);
+
+			//level = 23x23 grid
+			//top
+			for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, i, 2.75f);
+			//bottom
+			for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, i, -2.75f);
+			//left
+			for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, 2.75f, i);
+			//right
+			for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, -2.75f, i);
+
+			for (float x = -2.75f; x <= 2.75f; x += 0.25f)
+			{
+				for (float y = -2.75f; y <= 2.75f; y += 0.25f)
+				{
+					manager.add_sprite_by_type(sprite_types::ground, x, y);
+				}
+			}
+			//manager.add_sprite_by_type(sprite_types::invaderer, 0, -1.75f);
 		}
 
 		// called every frame to move things
@@ -487,8 +649,6 @@ namespace octet {
 
 			// draw all the sprites
 			manager.render();
-
-			char score_text[32];
 
 			// move the listener with the camera
 			vec4 &cpos = cameraToWorld.w();
