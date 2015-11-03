@@ -12,6 +12,7 @@
 #include <iostream>
 #include <string>
 #include <list>
+#include <Windows.h>
 
 #include "../../octet.h"
 

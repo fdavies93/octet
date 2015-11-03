@@ -64,11 +64,14 @@ namespace octet {
 	public:
 		sprite_directions facing;
 
+		int health;
+
 		sprite() {
 			texture = 0;
 			type = sprite_types::type_null;
 			enabled = false;
 			facing = sprite_directions::DOWN;
+			health = 0;
 		}
 
 		void init(int _texture, float x, float y, float w, float h) {
@@ -213,6 +216,26 @@ namespace octet {
 		{
 			return halfHeight;
 		}
+
+		//up and right are the positive axis; just as you would expect in cartesian space
+		void separateFrom(sprite& toSeparateFrom) {//moves self away from toSeparateFrom; does not affect other sprite
+			if (getX() != getPrevX())//moved left
+			{
+				translate(getPrevX()-getX(),0);
+			}
+			/*else if(getX() != getPrevX()){//moved right
+				translate(getX()-getPrevX(), 0);
+			}*/
+
+			if (getY() != getPrevY())//moved down
+			{
+				translate(0, getPrevY() - getY());
+			}
+			/*else if (getY() != getPrevY())//moved up
+			{
+				translate(0, getY() - getPrevY());
+			}*/
+		}
 	};
 
 	struct sprite_type_data
@@ -222,6 +245,7 @@ namespace octet {
 		float w;
 		float h;
 		bool collides;
+		int health;
 	};
 
 	//stores and manages game data in convenient ways
@@ -231,8 +255,12 @@ namespace octet {
 		const float PLAYER_SPEED = 0.05f;
 		const float BULLET_BUFFER = 0.1f;
 		const float BULLET_SPEED = 0.1f;
+		const unsigned int BULLET_DAMAGE = 10;
 		const float ENEMY_SPEED = 0.05f;
-		const float ENEMY_TURN_CHANCE = 0.05f;//in percent
+		const float ENEMY_TURN_CHANCE = 0.05f;//a percentage
+		const float TILE_WIDTH = 0.25f;//i.e. 32 pixels
+		const float MAP_X_OFFSET = -2.75f;
+		const float MAP_Y_OFFSET = -2.75f;
 
 		octet::app* myApp;
 		sprite dummy;
@@ -240,12 +268,12 @@ namespace octet {
 		ALuint sound_sources[num_sound_sources];
 		ALuint cur_sound_source;
 		sprite_type_data sprite_data[type_number];
-		std::list<int> colliding_sprites;//change to list
+		std::list<int> colliding_sprites;
 		std::list<int> background_sprites;
 		std::vector<sprite*> removal_list;
 		texture_shader *shader;
 		mat4t *worldCamera;
-		math::random randomiser;
+		math::random randomiser;//declared up here so it has a better range of (pseudo-)randomness
 		
 
 	public:
@@ -269,11 +297,13 @@ namespace octet {
 			sprite_data[player].w = 0.25f;// = 32px
 			sprite_data[player]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/player.gif");
 			sprite_data[player].collides = true;
+			sprite_data[player].health = 100;
 
 			sprite_data[enemy].h = 0.25f;
 			sprite_data[enemy].w = 0.25f;
 			sprite_data[enemy]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/enemy.gif");
 			sprite_data[enemy].collides = true;
+			sprite_data[enemy].health = 100;
 
 			sprite_data[rock].h = 0.25f;
 			sprite_data[rock].w = 0.25f;
@@ -295,7 +325,12 @@ namespace octet {
 			alGenSources(num_sound_sources, sound_sources);
 
 			//and misc
-			randomiser.set_seed(210893U);
+			time_t now = time(0);
+			unsigned int now_i = unsigned int(now);//just here for a bit of indeterminacy
+			randomiser.set_seed(now_i);
+
+			//loads background objects, rocks, etc
+			load_map_from_csv("../assets/assignment_8_nov/testmap.csv");
 		}
 
 		void playSound(string fileName)
@@ -321,6 +356,7 @@ namespace octet {
 				if (!contained_sprites[cur_sprite].is_enabled()) {
 					contained_sprites[cur_sprite].init(_texture, x, y, w, h);
 					contained_sprites[cur_sprite].get_type() = type;
+					contained_sprites[cur_sprite].health = sprite_data[type].health;
 					if (sprite_data[type].collides) colliding_sprites.push_back(cur_sprite);
 					else background_sprites.push_back(cur_sprite);
 					break;
@@ -391,7 +427,8 @@ namespace octet {
 		//makes adding generic objects much easier by abstracting out their data
 		sprite &add_sprite_by_type(sprite_types type, float x, float y)
 		{
-			return add_sprite(sprite_data[type]._texture, x, y, sprite_data[type].w, sprite_data[type].h, type);
+			sprite& returnSprite = add_sprite(sprite_data[type]._texture, x, y, sprite_data[type].w, sprite_data[type].h, type);
+			return returnSprite;
 		}
 		
 		void render()
@@ -410,7 +447,7 @@ namespace octet {
 			}
 		}
 
-		void simulateObject(sprite &object)
+		void simulate_object(sprite &object)
 		{
 			if (object.get_type() == sprite_types::player)
 			{
@@ -496,43 +533,81 @@ namespace octet {
 			}
 		}
 
-		void simulateObjects()
+		void simulate_objects()
 		{
 			std::list<int>::iterator sprite_i;
 			for (sprite_i = colliding_sprites.begin(); sprite_i != colliding_sprites.end(); ++sprite_i)
 			{
-				simulateObject(contained_sprites[*sprite_i]);
+				simulate_object(contained_sprites[*sprite_i]);
 			}
 		}
 
-		void resolveCollision(sprite &subject, sprite &object)
+		void resolve_collision(sprite &subject, sprite &object)
 		{
 			//note: subject is always the thing ACTING UPON the object
+			//that is, the properties of the subject NEVER change
+			//this just keeps things organised
 			if (subject.get_type() == sprite_types::rock)
 			{
 				if(object.get_type() == sprite_types::bullet) removal_list.push_back(&object);
 				else if (object.get_type() == sprite_types::player || object.get_type() == sprite_types::enemy)
 				{
-					object.reset_position();
-					object.translate(object.getPrevX(), object.getPrevY());
+					object.separateFrom(subject);
 					//i.e. move it back to its previous location
+					if (object.get_type() == sprite_types::enemy)
+					{
+						float newFacing = randomiser.get(0.0f, 1.0f);
+						if (newFacing < 0.25f) object.facing = sprite_directions::DOWN;
+						else if (newFacing < 0.5f) object.facing = sprite_directions::UP;
+						else if (newFacing < 0.75f) object.facing = sprite_directions::LEFT;
+						else if (newFacing < 1.00f) object.facing = sprite_directions::RIGHT;
+					}
 				}
 			}
 			else if (subject.get_type() == sprite_types::bullet)
 			{
-
+				if (object.get_type() == sprite_types::enemy)
+				{
+					object.health -= 10;
+					if (object.health <= 0) removal_list.push_back(&object);
+				}
 			}
 			else if (subject.get_type() == sprite_types::enemy)
 			{
 				if (object.get_type() == sprite_types::enemy)
 				{
-					object.reset_position();
-					object.translate(object.getPrevX(),object.getPrevY());
+					//object.reset_position();
+					//object.translate(object.getPrevX(),object.getPrevY());
+					object.separateFrom(subject);
+					float newFacing = randomiser.get(0.0f, 1.0f);
+					if (newFacing < 0.25f) object.facing = sprite_directions::DOWN;
+					else if (newFacing < 0.5f) object.facing = sprite_directions::UP;
+					else if (newFacing < 0.75f) object.facing = sprite_directions::LEFT;
+					else if (newFacing < 1.00f) object.facing = sprite_directions::RIGHT;
+				}
+				if (object.get_type() == sprite_types::bullet)
+				{
+					removal_list.push_back(&object);
+				}
+				if (object.get_type() == sprite_types::player)
+				{
+					object.separateFrom(subject);
+				}
+			}
+			else if (subject.get_type() == sprite_types::player) {
+				if (object.get_type() == sprite_types::enemy)
+				{
+					object.separateFrom(subject);
+					float newFacing = randomiser.get(0.0f, 1.0f);
+					if (newFacing < 0.25f) object.facing = sprite_directions::DOWN;
+					else if (newFacing < 0.5f) object.facing = sprite_directions::UP;
+					else if (newFacing < 0.75f) object.facing = sprite_directions::LEFT;
+					else if (newFacing < 1.00f) object.facing = sprite_directions::RIGHT;
 				}
 			}
 		}
 
-		void checkCollisions()
+		void check_collisions()
 		{
 			std::list<int>::iterator sprite1_i, sprite2_i;
 			sprite *sprite1, *sprite2;
@@ -542,12 +617,12 @@ namespace octet {
 				for (sprite2_i = colliding_sprites.begin(); sprite2_i != colliding_sprites.end(); ++sprite2_i)
 				{
 					sprite2 = &contained_sprites[*sprite2_i];
-					if (sprite1->collides_with(*sprite2) && sprite1 != sprite2) resolveCollision(*sprite1, *sprite2);
+					if (sprite1->collides_with(*sprite2) && sprite1 != sprite2) resolve_collision(*sprite1, *sprite2);
 				}
 			}
 		}
 
-		void removeDeadObjects()
+		void remove_dead_objects()
 		{
 			for (ALuint i = 0; i < removal_list.size(); ++i)
 			{
@@ -559,14 +634,59 @@ namespace octet {
 			}
 		}
 
+		bool load_map_from_csv(std::string file_path)
+		{
+			std::ifstream input_file;
+			char cur_line[2048];
+			std::string cur_data;
+			int type_id;
+			int cur_entry;
+			unsigned int cur_x, cur_y;
+
+			input_file.open(file_path.c_str(), std::ios_base::in);
+
+			if (input_file.fail()) {
+				printf("error in opening file\n");
+				return false;
+			}
+			
+			cur_y = 0;
+			while (!input_file.eof())
+			{
+				input_file.getline(cur_line, sizeof(cur_line));
+				cur_data.clear();
+				cur_x = 0;
+				for (int col = 0; ; ++col)
+				{
+					if (cur_line[col] != ',' && cur_line[col] != 0)	cur_data += cur_line[col];
+					else {
+						//process data
+						type_id = std::stoi(cur_data);
+						
+						add_sprite_by_type(static_cast<sprite_types>(type_id), (cur_x * TILE_WIDTH) + MAP_X_OFFSET, (cur_y * TILE_WIDTH) + MAP_Y_OFFSET);
+						//^ this is hacky, but easy
+						//printf(cur_data.c_str());
+						//printf(",");
+						cur_data.clear();
+						++cur_x;
+					}
+
+					if (cur_line[col] == 0) break;
+				}
+				++cur_y;
+				//printf(cur_line);
+				//printf("\n");
+			}
+		}
+
 		void simulate()
 		{
 			//move objects
-			simulateObjects();
+			simulate_objects();
 			//resolve collisions
-			checkCollisions();
+			check_collisions();
 			//remove objects on remove list
-			removeDeadObjects();
+			remove_dead_objects();
 		}
 
 		void update()
@@ -652,13 +772,13 @@ namespace octet {
 
 			//level = 23x23 grid
 			//top
-			for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, i, 2.75f);
+			//for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, i, 2.75f);
 			//bottom
-			for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, i, -2.75f);
+			//for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, i, -2.75f);
 			//left
-			for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, 2.75f, i);
+			//for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, 2.75f, i);
 			//right
-			for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, -2.75f, i);
+			//for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, -2.75f, i);
 
 			/*for (float x = -2.75f; x <= 2.75f; x += 0.25f)
 			{
@@ -671,6 +791,8 @@ namespace octet {
 			manager.add_sprite_by_type(sprite_types::enemy, -1.75f, -1.75f);
 			manager.add_sprite_by_type(sprite_types::enemy, 1.75f, 1.75f);
 			manager.add_sprite_by_type(sprite_types::enemy, 0, 1.75f);
+			manager.add_sprite_by_type(sprite_types::enemy, 1, 1.75f);
+			manager.add_sprite_by_type(sprite_types::enemy, 0.5f, -0.5f);
 			//manager.add_sprite_by_type(sprite_types::enemy, -1.75f, -1.75f);
 		}
 
