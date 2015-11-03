@@ -35,10 +35,10 @@ namespace octet {
 	};
 
 	enum sprite_directions {
-		LEFT,
-		RIGHT,
-		UP,
-		DOWN,
+		LEFT = 0,
+		RIGHT = 1,
+		UP = 2,
+		DOWN = 3,
 	};
 
 	class sprite {
@@ -259,8 +259,8 @@ namespace octet {
 		const float ENEMY_SPEED = 0.05f;
 		const float ENEMY_TURN_CHANCE = 0.05f;//a percentage
 		const float TILE_WIDTH = 0.25f;//i.e. 32 pixels
-		const float MAP_X_OFFSET = -2.75f;
-		const float MAP_Y_OFFSET = -2.75f;
+		const float MAP_X_OFFSET = -3.0f;
+		const float MAP_Y_OFFSET = -3.0f;
 
 		octet::app* myApp;
 		sprite dummy;
@@ -275,6 +275,7 @@ namespace octet {
 		mat4t *worldCamera;
 		math::random randomiser;//declared up here so it has a better range of (pseudo-)randomness
 		
+		std::string exits[4];//same enumeration as sprite directions
 
 	public:
 
@@ -315,8 +316,8 @@ namespace octet {
 			sprite_data[bullet]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/bullet.gif");
 			sprite_data[bullet].collides = true;
 
-			sprite_data[ground].h = 0.25f;
-			sprite_data[ground].w = 0.25f;
+			sprite_data[ground].h = 6.0f;
+			sprite_data[ground].w = 6.0f;
 			sprite_data[ground]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/ground.gif");
 			sprite_data[ground].collides = false;
 
@@ -330,7 +331,7 @@ namespace octet {
 			randomiser.set_seed(now_i);
 
 			//loads background objects, rocks, etc
-			load_map_from_csv("../assets/assignment_8_nov/testmap.csv");
+			load_map_from_csv("../assets/assignment_8_nov/stage1.csv");
 		}
 
 		void playSound(string fileName)
@@ -636,12 +637,16 @@ namespace octet {
 
 		bool load_map_from_csv(std::string file_path)
 		{
+			add_sprite_by_type(sprite_types::ground, 0.0f, 0.0f);
+			for (int i = 0; i < 4; ++i) exits[i] = "NONE";
+
 			std::ifstream input_file;
 			char cur_line[2048];
 			std::string cur_data;
 			int type_id;
 			int cur_entry;
 			unsigned int cur_x, cur_y;
+			bool readHeader = false;
 
 			input_file.open(file_path.c_str(), std::ios_base::in);
 
@@ -650,7 +655,8 @@ namespace octet {
 				return false;
 			}
 			
-			cur_y = 0;
+			cur_y = -1;
+
 			while (!input_file.eof())
 			{
 				input_file.getline(cur_line, sizeof(cur_line));
@@ -660,17 +666,14 @@ namespace octet {
 				{
 					if (cur_line[col] != ',' && cur_line[col] != 0)	cur_data += cur_line[col];
 					else {
-						//process data
-						type_id = std::stoi(cur_data);
-						
-						add_sprite_by_type(static_cast<sprite_types>(type_id), (cur_x * TILE_WIDTH) + MAP_X_OFFSET, (cur_y * TILE_WIDTH) + MAP_Y_OFFSET);
-						//^ this is hacky, but easy
-						//printf(cur_data.c_str());
-						//printf(",");
+						if (cur_y == -1) exits[cur_x] = cur_data;
+						else {
+							type_id = std::stoi(cur_data);
+							if (type_id != -1) add_sprite_by_type(static_cast<sprite_types>(type_id), (cur_x * TILE_WIDTH) + MAP_X_OFFSET, (cur_y * TILE_WIDTH) + MAP_Y_OFFSET);
+						}
 						cur_data.clear();
 						++cur_x;
 					}
-
 					if (cur_line[col] == 0) break;
 				}
 				++cur_y;
@@ -787,12 +790,12 @@ namespace octet {
 					manager.add_sprite_by_type(sprite_types::ground, x, y);
 				}
 			}*/
-			manager.add_sprite_by_type(sprite_types::enemy, 0, -1.75f);
+			/*manager.add_sprite_by_type(sprite_types::enemy, 0, -1.75f);
 			manager.add_sprite_by_type(sprite_types::enemy, -1.75f, -1.75f);
 			manager.add_sprite_by_type(sprite_types::enemy, 1.75f, 1.75f);
 			manager.add_sprite_by_type(sprite_types::enemy, 0, 1.75f);
 			manager.add_sprite_by_type(sprite_types::enemy, 1, 1.75f);
-			manager.add_sprite_by_type(sprite_types::enemy, 0.5f, -0.5f);
+			manager.add_sprite_by_type(sprite_types::enemy, 0.5f, -0.5f);*/
 			//manager.add_sprite_by_type(sprite_types::enemy, -1.75f, -1.75f);
 		}
 
