@@ -31,7 +31,8 @@ namespace octet {
 		bullet = 2,
 		rock = 3,
 		ground = 4,
-		type_number = 5,
+		lock = 5,
+		type_number = 6,
 	};
 
 	enum sprite_directions {
@@ -276,6 +277,7 @@ namespace octet {
 		math::random randomiser;//declared up here so it has a better range of (pseudo-)randomness
 		
 		std::string exits[4];//same enumeration as sprite directions
+		int enemy_count; 
 
 	public:
 
@@ -321,6 +323,11 @@ namespace octet {
 			sprite_data[ground]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/ground.gif");
 			sprite_data[ground].collides = false;
 
+			sprite_data[lock].h = 0.25f;
+			sprite_data[lock].w = 0.25f;
+			sprite_data[lock]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/lock.gif");
+			sprite_data[lock].collides = true;
+
 			//...and sounds
 			cur_sound_source = 0;
 			alGenSources(num_sound_sources, sound_sources);
@@ -329,8 +336,9 @@ namespace octet {
 			time_t now = time(0);
 			unsigned int now_i = unsigned int(now);//just here for a bit of indeterminacy
 			randomiser.set_seed(now_i);
+			enemy_count = 0;
 
-			//loads background objects, rocks, etc
+			//draws ground, loads objects
 			load_map_from_csv("../assets/assignment_8_nov/stage1.csv");
 		}
 
@@ -360,6 +368,7 @@ namespace octet {
 					contained_sprites[cur_sprite].health = sprite_data[type].health;
 					if (sprite_data[type].collides) colliding_sprites.push_back(cur_sprite);
 					else background_sprites.push_back(cur_sprite);
+					if (type == sprite_types::enemy) ++enemy_count;
 					break;
 				}
 			cur_sprite++;
@@ -408,6 +417,10 @@ namespace octet {
 					break;
 				}
 				++cur_sprite;
+			}
+			if (toRemove.get_type() == sprite_types::enemy) {
+				enemy_count--;
+				std::cout << enemy_count << "enemies remain\n";
 			}
 			if (cur_sprite < max_sprites) return true;
 			else return false;
@@ -532,6 +545,9 @@ namespace octet {
 					removal_list.push_back(&object);
 				}
 			}
+			else if (object.get_type() == sprite_types::lock) {
+				if (enemy_count == 0) removal_list.push_back(&object);
+			}
 		}
 
 		void simulate_objects()
@@ -541,6 +557,15 @@ namespace octet {
 			{
 				simulate_object(contained_sprites[*sprite_i]);
 			}
+		}
+
+		void turn_enemy(sprite &object)
+		{
+			float newFacing = randomiser.get(0.0f, 1.0f);
+			if (newFacing < 0.25f) object.facing = sprite_directions::DOWN;
+			else if (newFacing < 0.5f) object.facing = sprite_directions::UP;
+			else if (newFacing < 0.75f) object.facing = sprite_directions::LEFT;
+			else if (newFacing < 1.00f) object.facing = sprite_directions::RIGHT;
 		}
 
 		void resolve_collision(sprite &subject, sprite &object)
@@ -555,14 +580,7 @@ namespace octet {
 				{
 					object.separateFrom(subject);
 					//i.e. move it back to its previous location
-					if (object.get_type() == sprite_types::enemy)
-					{
-						float newFacing = randomiser.get(0.0f, 1.0f);
-						if (newFacing < 0.25f) object.facing = sprite_directions::DOWN;
-						else if (newFacing < 0.5f) object.facing = sprite_directions::UP;
-						else if (newFacing < 0.75f) object.facing = sprite_directions::LEFT;
-						else if (newFacing < 1.00f) object.facing = sprite_directions::RIGHT;
-					}
+					if (object.get_type() == sprite_types::enemy) turn_enemy(object);
 				}
 			}
 			else if (subject.get_type() == sprite_types::bullet)
@@ -604,6 +622,16 @@ namespace octet {
 					else if (newFacing < 0.5f) object.facing = sprite_directions::UP;
 					else if (newFacing < 0.75f) object.facing = sprite_directions::LEFT;
 					else if (newFacing < 1.00f) object.facing = sprite_directions::RIGHT;
+				}
+			}
+			else if (subject.get_type() == sprite_types::lock)
+			{
+				if (object.get_type() == sprite_types::bullet) removal_list.push_back(&object);
+				else if (object.get_type() == sprite_types::player || object.get_type() == sprite_types::enemy)
+				{
+					object.separateFrom(subject);
+					//i.e. move it back to its previous location
+					if (object.get_type() == sprite_types::enemy) turn_enemy(object);
 				}
 			}
 		}
@@ -664,22 +692,23 @@ namespace octet {
 				cur_x = 0;
 				for (int col = 0; ; ++col)
 				{
-					if (cur_line[col] != ',' && cur_line[col] != 0)	cur_data += cur_line[col];
-					else {
-						if (cur_y == -1) exits[cur_x] = cur_data;
-						else {
+					if (cur_line[col] == ',' || (cur_line[col] == 0 && !cur_data.empty())) {
+						if (cur_y == -1 && cur_x < 4) exits[cur_x] = cur_data;
+						else if (cur_y != -1) {
 							type_id = std::stoi(cur_data);
 							if (type_id != -1) add_sprite_by_type(static_cast<sprite_types>(type_id), (cur_x * TILE_WIDTH) + MAP_X_OFFSET, (cur_y * TILE_WIDTH) + MAP_Y_OFFSET);
 						}
 						cur_data.clear();
 						++cur_x;
 					}
-					if (cur_line[col] == 0) break;
+					else if (cur_line[col] != 0) cur_data += cur_line[col];
+					if (cur_line[col] == 0 && cur_data.empty()) break;
 				}
 				++cur_y;
 				//printf(cur_line);
 				//printf("\n");
 			}
+			input_file.close();
 		}
 
 		void simulate()
