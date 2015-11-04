@@ -33,7 +33,8 @@ namespace octet {
 		ground = 4,
 		lock = 5,
 		boss = 6,
-		type_number = 7,
+		enemy_bullet = 7,
+		type_number = 8,
 	};
 
 	enum sprite_directions {
@@ -222,22 +223,42 @@ namespace octet {
 
 		//up and right are the positive axis; just as you would expect in cartesian space
 		void separateFrom(sprite& toSeparateFrom) {//moves self away from toSeparateFrom; does not affect other sprite
-			if (getX() != getPrevX())//moved left
+			/*float dx = fabsf(toSeparateFrom.getX() - getX());
+			float dy = fabsf(toSeparateFrom.getY() - getY());
+			float sumHalfWidths = toSeparateFrom.getHalfWidth() + getHalfWidth();
+			float sumHalfHeights = toSeparateFrom.getHalfHeight() + getHalfHeight();
+
+			if (fabsf(getPrevX() - getX()) > fabsf(getPrevY() - getY()))
+			{
+				if (getX() < toSeparateFrom.getX())//i.e. to LEFT of object
+				{
+					translate(dx - sumHalfWidths - 0.00125f, 0);
+				}
+				else//to RIGHT
+				{
+					translate(sumHalfWidths - dx + 0.00125f, 0);
+				}
+			}
+			else if (fabsf(getPrevY() - getY()) > fabsf(getPrevX() - getX())){
+				if (getY() < toSeparateFrom.getY())
+				{
+					translate(0, dy - sumHalfHeights - 0.00125f);
+				}
+				else
+				{
+					translate(0, sumHalfHeights - dy + 0.00125f);
+				}
+			}*/
+			
+			if (getX() != getPrevX())//moved on the x axis
 			{
 				translate(getPrevX()-getX(),0);
 			}
-			/*else if(getX() != getPrevX()){//moved right
-				translate(getX()-getPrevX(), 0);
-			}*/
 
-			if (getY() != getPrevY())//moved down
+			if (getY() != getPrevY())//moved on the y axis
 			{
 				translate(0, getPrevY() - getY());
 			}
-			/*else if (getY() != getPrevY())//moved up
-			{
-				translate(0, getY() - getPrevY());
-			}*/
 		}
 	};
 
@@ -262,7 +283,7 @@ namespace octet {
 	class game_manager
 	{		
 	private:
-		const float PLAYER_SPEED = 0.05f;
+		const float PLAYER_SPEED = 0.075f;
 		const float BULLET_BUFFER = 0.1f;
 		const float BULLET_SPEED = 0.1f;
 		const unsigned int BULLET_DAMAGE = 10;
@@ -337,6 +358,11 @@ namespace octet {
 			sprite_data[bullet]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/bullet.gif");
 			sprite_data[bullet].collides = true;
 
+			sprite_data[enemy_bullet].h = 0.0625f;
+			sprite_data[enemy_bullet].w = 0.0625f;
+			sprite_data[enemy_bullet]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/enemy_bullet.gif");
+			sprite_data[enemy_bullet].collides = true;
+
 			sprite_data[ground].h = 6.0f;
 			sprite_data[ground].w = 6.0f;
 			sprite_data[ground]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/ground.gif");
@@ -375,7 +401,7 @@ namespace octet {
 			load_map_from_csv("../assets/assignment_8_nov/stage1.csv");
 		}
 
-		void playSound(string fileName)
+		void play_sound(string fileName)
 		{
 			ALuint mySound = resource_dict::get_sound_handle(AL_FORMAT_MONO16, fileName.c_str());
 			ALuint source = get_sound_source();
@@ -401,9 +427,9 @@ namespace octet {
 					contained_sprites[cur_sprite].health = sprite_data[type].health;
 					if (sprite_data[type].collides) colliding_sprites.push_back(cur_sprite);
 					else background_sprites.push_back(cur_sprite);
-					if (type == sprite_types::enemy) ++enemy_count;
+					if (type == sprite_types::enemy || type == sprite_types::boss) ++enemy_count;
 					else if (type == sprite_types::player) player_sprite = &contained_sprites[cur_sprite];
-					else if (type == sprite_types::boss) boss_sprite = &contained_sprites[cur_sprite];
+					if (type == sprite_types::boss) boss_sprite = &contained_sprites[cur_sprite];
 					break;
 				}
 			cur_sprite++;
@@ -479,7 +505,7 @@ namespace octet {
 		
 		bool load_map_from_csv(std::string file_path)
 		{
-			//add_sprite_by_type(sprite_types::ground, 0.0f, 0.0f);
+			enemy_count = 0;
 			for (int i = 0; i < 4; ++i) {
 				exits[i].leads_to = "NULL";
 				exits[i].new_x = 0.0f;
@@ -551,7 +577,6 @@ namespace octet {
 
 		bool go_through_exit(sprite_directions exit_direction)
 		{
-			std::cout << exits[exit_direction].leads_to << "\n";
 			if (exits[exit_direction].leads_to == "NULL") return false;
 
 			for (int i = 0; i < constants::max_sprites; ++i)
@@ -675,9 +700,6 @@ namespace octet {
 						break;
 					}
 				}
-				if (myApp->is_key_going_down(key_ctrl)) {
-					object.health -= 100;
-				}
 
 				if (object.getX() > 3.0f || object.getX() < -3.0f || object.getY() > 3.0f || object.getY() < -3.0f)
 				{
@@ -686,7 +708,10 @@ namespace octet {
 					if (object.getY() > 3.0f) exit_flag = sprite_directions::UP;
 					else if (object.getY() < -3.0f) exit_flag = sprite_directions::DOWN;
 				}
-				if (object.health <= 0) lose_flag = true;
+				if (object.health <= 0) {
+					lose_flag = true;
+					play_sound("assets/assignment_8_nov/failure.wav");
+				}
 			}
 			else if (object.get_type() == sprite_types::enemy) {
 				switch (object.facing){
@@ -712,6 +737,7 @@ namespace octet {
 					else if (turn_direction < 0.5f) object.facing = sprite_directions::DOWN;
 					else if (turn_direction < 0.75f) object.facing = sprite_directions::LEFT;
 					else if (turn_direction < 1.0f) object.facing = sprite_directions::RIGHT;
+					add_sprite_by_type(sprite_types::enemy_bullet, object.getX(), object.getY()).facing = object.facing;
 				}
 				if (object.getX() < -3.0f || object.getX() > 3.0f || object.getY() < -3.0f || object.getY() > 3.0f) removal_list.push_back(&object);
 				//this just prevents the minor collision issues from ever being game breaking
@@ -723,8 +749,50 @@ namespace octet {
 				if (object.facing == sprite_directions::RIGHT) object.translate(BULLET_SPEED, 0);
 				if (object.getX() < -3.0f || object.getX() > 3.0f || object.getY() > 3.0f || object.getY() < -3.0f) removal_list.push_back(&object);
 			}
+			else if (object.get_type() == sprite_types::enemy_bullet) {
+				if (object.facing == sprite_directions::UP) object.translate(0, BULLET_SPEED);
+				if (object.facing == sprite_directions::DOWN) object.translate(0, -BULLET_SPEED);
+				if (object.facing == sprite_directions::LEFT) object.translate(-BULLET_SPEED, 0);
+				if (object.facing == sprite_directions::RIGHT) object.translate(BULLET_SPEED, 0);
+				if (object.getX() < -3.0f || object.getX() > 3.0f || object.getY() > 3.0f || object.getY() < -3.0f) removal_list.push_back(&object);
+			}
 			else if (object.get_type() == sprite_types::lock) {
 				if (enemy_count == 0) removal_list.push_back(&object);
+			}
+			else if (object.get_type() == sprite_types::boss) {
+				
+				if (player_sprite->getX() - player_sprite->getHalfWidth() >= object.getX() && fabsf(object.getX() - player_sprite->getX()) > 0.5f)
+				{
+					object.translate(ENEMY_SPEED, 0);
+				}
+				else if (player_sprite->getX() + player_sprite->getHalfWidth() <= object.getX() && fabsf(object.getX() - player_sprite->getX()) > 0.5f)
+				{
+					object.translate(-ENEMY_SPEED, 0);
+				}
+				if (player_sprite->getY() - player_sprite->getHalfHeight() >= object.getY() && fabsf(object.getY() - player_sprite->getY()) > 0.5f)
+				{
+					object.translate(0, ENEMY_SPEED);
+				}
+				else if (player_sprite->getY() + player_sprite->getHalfHeight() <= object.getY() && fabsf(object.getY() - player_sprite->getY()) > 0.5f)
+				{
+					object.translate(0, -ENEMY_SPEED);
+				}
+
+				if (randomiser.get(0.0f, 1.0f) < 0.05f) {
+					sprite* newBullet = &add_sprite_by_type(sprite_types::enemy_bullet, object.getX(), object.getY());
+					if (player_sprite->getX() < object.getX()) newBullet->facing = sprite_directions::LEFT;
+					else newBullet->facing = sprite_directions::RIGHT;
+					newBullet = &add_sprite_by_type(sprite_types::enemy_bullet, object.getX(), object.getY());
+					if (player_sprite->getY() < object.getY()) newBullet->facing = sprite_directions::DOWN;
+					else newBullet->facing = sprite_directions::UP;
+				}
+
+				/*float fire_chance = randomiser.get(0.0f, 1.0f);
+				if (fire_chance < 0.25f)
+				{
+					sprite& newBullet = add_sprite_by_type(sprite_types::enemy_bullet, object.getX(), object.getY());
+					newBullet.facing = sprite_directions::LEFT;
+				}*/
 			}
 		}
 
@@ -756,7 +824,8 @@ namespace octet {
 			if (subject.get_type() == sprite_types::rock)
 			{
 				if(object.get_type() == sprite_types::bullet) removal_list.push_back(&object);
-				else if (object.get_type() == sprite_types::player || object.get_type() == sprite_types::enemy)
+				else if (object.get_type() == sprite_types::enemy_bullet) removal_list.push_back(&object);
+				else if (object.get_type() == sprite_types::player || object.get_type() == sprite_types::enemy || object.get_type() == sprite_types::boss)
 				{
 					object.separateFrom(subject);
 					//i.e. move it back to its previous location
@@ -770,7 +839,10 @@ namespace octet {
 					object.health -= 10;
 					if (object.health <= 0) {
 						removal_list.push_back(&object);
-						if (object.get_type() == sprite_types::boss) win_flag = true;
+						if (object.get_type() == sprite_types::boss) {
+							win_flag = true;
+							play_sound("assets/assignment_8_nov/triumph.wav");
+						}
 					}
 				}
 			}
@@ -787,13 +859,13 @@ namespace octet {
 					else if (newFacing < 0.75f) object.facing = sprite_directions::LEFT;
 					else if (newFacing < 1.00f) object.facing = sprite_directions::RIGHT;
 				}
-				if (object.get_type() == sprite_types::bullet)
+				else if (object.get_type() == sprite_types::bullet)
 				{
 					removal_list.push_back(&object);
 				}
-				if (object.get_type() == sprite_types::player)
+				else if (object.get_type() == sprite_types::player)
 				{
-					object.health -= 1;
+					object.health -= 2;
 					object.separateFrom(subject);
 				}
 			}
@@ -807,10 +879,19 @@ namespace octet {
 					else if (newFacing < 0.75f) object.facing = sprite_directions::LEFT;
 					else if (newFacing < 1.00f) object.facing = sprite_directions::RIGHT;
 				}
+				else if (object.get_type() == sprite_types::enemy_bullet)
+				{
+					removal_list.push_back(&object);
+				}
+				else if (object.get_type() == sprite_types::boss)
+				{
+					object.separateFrom(subject);
+				}
 			}
 			else if (subject.get_type() == sprite_types::lock)
 			{
 				if (object.get_type() == sprite_types::bullet) removal_list.push_back(&object);
+				else if (object.get_type() == sprite_types::enemy_bullet) removal_list.push_back(&object);
 				else if (object.get_type() == sprite_types::player || object.get_type() == sprite_types::enemy)
 				{
 					object.separateFrom(subject);
@@ -820,6 +901,16 @@ namespace octet {
 			}
 			else if (subject.get_type() == sprite_types::boss) {
 				if (object.get_type() == sprite_types::bullet) removal_list.push_back(&object);
+				if (object.get_type() == sprite_types::player)
+				{
+					object.health -= 4;
+					object.separateFrom(subject);
+					if (object.health <= 0) play_sound("assets/assignment_8_nov/failure.wav");
+				}
+			}
+			else if (subject.get_type() == sprite_types::enemy_bullet)
+			{
+				if (object.get_type() == sprite_types::player) object.health -= 5;
 			}
 		}
 
