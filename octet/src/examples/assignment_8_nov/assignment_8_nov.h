@@ -36,6 +36,7 @@ namespace octet {
 	};
 
 	enum sprite_directions {
+		NONE = -1,
 		LEFT = 0,
 		RIGHT = 1,
 		UP = 2,
@@ -249,6 +250,13 @@ namespace octet {
 		int health;
 	};
 
+	struct exit_data
+	{
+		std::string leads_to;
+		float new_x;
+		float new_y;
+	};
+
 	//stores and manages game data in convenient ways
 	class game_manager
 	{		
@@ -276,8 +284,11 @@ namespace octet {
 		mat4t *worldCamera;
 		math::random randomiser;//declared up here so it has a better range of (pseudo-)randomness
 		
-		std::string exits[4];//same enumeration as sprite directions
+		exit_data exits[4];//same enumeration as sprite directions
 		int enemy_count; 
+		sprite* player_sprite;
+		sprite_directions exit_flag;//set to direction of exit on request for exit
+
 
 	public:
 
@@ -337,6 +348,8 @@ namespace octet {
 			unsigned int now_i = unsigned int(now);//just here for a bit of indeterminacy
 			randomiser.set_seed(now_i);
 			enemy_count = 0;
+			player_sprite = NULL;
+			exit_flag = sprite_directions::NONE;
 
 			//draws ground, loads objects
 			load_map_from_csv("../assets/assignment_8_nov/stage1.csv");
@@ -350,7 +363,7 @@ namespace octet {
 			alSourcePlay(source);
 		}
 		
-		//checks memory references for a fairly safe way of testing for null returns	
+		//checks memory references for a fairly safe way of testing for null returns
 		bool is_dummy(sprite possible_dummy)
 		{
 			return &dummy == &possible_dummy;
@@ -369,6 +382,7 @@ namespace octet {
 					if (sprite_data[type].collides) colliding_sprites.push_back(cur_sprite);
 					else background_sprites.push_back(cur_sprite);
 					if (type == sprite_types::enemy) ++enemy_count;
+					else if (type == sprite_types::player) player_sprite = &contained_sprites[cur_sprite];
 					break;
 				}
 			cur_sprite++;
@@ -418,10 +432,7 @@ namespace octet {
 				}
 				++cur_sprite;
 			}
-			if (toRemove.get_type() == sprite_types::enemy) {
-				enemy_count--;
-				std::cout << enemy_count << "enemies remain\n";
-			}
+			if (toRemove.get_type() == sprite_types::enemy) enemy_count--;
 			if (cur_sprite < max_sprites) return true;
 			else return false;
 		}
@@ -445,6 +456,92 @@ namespace octet {
 			return returnSprite;
 		}
 		
+		bool load_map_from_csv(std::string file_path)
+		{
+			add_sprite_by_type(sprite_types::ground, 0.0f, 0.0f);
+			for (int i = 0; i < 4; ++i) {
+				exits[i].leads_to = "NULL";
+				exits[i].new_x = 0.0f;
+				exits[i].new_y = 0.0f;
+			}
+			std::ifstream input_file;
+			char cur_line[2048];
+			std::string cur_data;
+			int type_id;
+			int cur_entry;
+			char data_entry, cur_exit;
+			unsigned int cur_x, cur_y;
+			bool readHeader = false;
+			sprite_types cur_type = sprite_types::type_null;
+
+			input_file.open(file_path.c_str(), std::ios_base::in);
+
+			if (input_file.fail()) {
+				printf("error in opening file\n");
+				return false;
+			}
+
+			cur_y = -1;
+
+			while (!input_file.eof())
+			{
+				input_file.getline(cur_line, sizeof(cur_line));
+				cur_data.clear();
+				cur_x = 0;
+				for (int col = 0; ; ++col)
+				{
+					if (cur_line[col] == ',' || (cur_line[col] == 0 && !cur_data.empty())) {
+						if (cur_y == -1 && cur_x < 12)
+						{
+							data_entry = cur_x % 3;
+							switch (data_entry)
+							{
+								case 0:
+									cur_exit = cur_x / 3;
+									exits[cur_exit].leads_to = cur_data;
+									break;
+								case 1:
+									exits[cur_exit].new_x = std::stof(cur_data);
+									break;
+								case 2:
+									exits[cur_exit].new_y = std::stof(cur_data);
+									break;
+							}
+						}
+						else if (cur_y != -1) {
+							cur_type = sprite_types::type_null;
+							if (cur_data == "R") cur_type = sprite_types::rock;
+							else if (cur_data == "L") cur_type = sprite_types::lock;
+							else if (cur_data == "E") cur_type = sprite_types::enemy;
+							if (cur_type != sprite_types::type_null) add_sprite_by_type(cur_type, (cur_x * TILE_WIDTH) + MAP_X_OFFSET, (cur_y * TILE_WIDTH) + MAP_Y_OFFSET);
+						}
+						cur_data.clear();
+						++cur_x;
+					}
+					else if (cur_line[col] != 0) cur_data += cur_line[col];
+					if (cur_line[col] == 0 && cur_data.empty()) break;
+				}
+				++cur_y;
+			}
+			input_file.close();
+			return true;
+		}
+
+		bool go_through_exit(sprite_directions exit_direction)
+		{
+			std::cout << exits[exit_direction].leads_to << "\n";
+			if (exits[exit_direction].leads_to == "NULL") return false;
+
+			for (int i = 0; i < constants::max_sprites; ++i)
+			{
+				if (contained_sprites[i].is_enabled() && contained_sprites[i].get_type() != sprite_types::player) remove_sprite(contained_sprites[i]);
+			}
+			player_sprite->reset_position();
+			player_sprite->translate(exits[exit_direction].new_x, exits[exit_direction].new_y);
+			load_map_from_csv(exits[exit_direction].leads_to);
+			return true;
+		}
+
 		void render()
 		{
 			std::list<int>::iterator sprite_iterator = background_sprites.begin();
@@ -508,6 +605,14 @@ namespace octet {
 				/*if (myApp->is_key_going_down(key_ctrl)) {
 					playSound("assets/invaderers/bang.wav");
 				}*/
+
+				if (object.getX() > 3.0f || object.getX() < -3.0f || object.getY() > 3.0f || object.getY() < -3.0f)
+				{
+					if (object.getX() > 3.0f) exit_flag = sprite_directions::RIGHT;
+					else if (object.getX() < -3.0f) exit_flag = sprite_directions::LEFT;
+					if (object.getY() > 3.0f) exit_flag = sprite_directions::UP;
+					else if (object.getY() < -3.0f) exit_flag = sprite_directions::DOWN;
+				}
 			}
 			else if (object.get_type() == sprite_types::enemy) {
 				switch (object.facing){
@@ -534,6 +639,8 @@ namespace octet {
 					else if (turn_direction < 0.75f) object.facing = sprite_directions::LEFT;
 					else if (turn_direction < 1.0f) object.facing = sprite_directions::RIGHT;
 				}
+				if (object.getX() < -3.0f || object.getX() > 3.0f || object.getY() < -3.0f || object.getY() > 3.0f) removal_list.push_back(&object);
+				//this just prevents the minor collision issues from ever being game breaking
 			}
 			else if (object.get_type() == sprite_types::bullet) {
 				if (object.facing == sprite_directions::UP) object.translate(0, BULLET_SPEED);
@@ -663,53 +770,6 @@ namespace octet {
 			}
 		}
 
-		bool load_map_from_csv(std::string file_path)
-		{
-			add_sprite_by_type(sprite_types::ground, 0.0f, 0.0f);
-			for (int i = 0; i < 4; ++i) exits[i] = "NONE";
-
-			std::ifstream input_file;
-			char cur_line[2048];
-			std::string cur_data;
-			int type_id;
-			int cur_entry;
-			unsigned int cur_x, cur_y;
-			bool readHeader = false;
-
-			input_file.open(file_path.c_str(), std::ios_base::in);
-
-			if (input_file.fail()) {
-				printf("error in opening file\n");
-				return false;
-			}
-			
-			cur_y = -1;
-
-			while (!input_file.eof())
-			{
-				input_file.getline(cur_line, sizeof(cur_line));
-				cur_data.clear();
-				cur_x = 0;
-				for (int col = 0; ; ++col)
-				{
-					if (cur_line[col] == ',' || (cur_line[col] == 0 && !cur_data.empty())) {
-						if (cur_y == -1 && cur_x < 4) exits[cur_x] = cur_data;
-						else if (cur_y != -1) {
-							type_id = std::stoi(cur_data);
-							if (type_id != -1) add_sprite_by_type(static_cast<sprite_types>(type_id), (cur_x * TILE_WIDTH) + MAP_X_OFFSET, (cur_y * TILE_WIDTH) + MAP_Y_OFFSET);
-						}
-						cur_data.clear();
-						++cur_x;
-					}
-					else if (cur_line[col] != 0) cur_data += cur_line[col];
-					if (cur_line[col] == 0 && cur_data.empty()) break;
-				}
-				++cur_y;
-				//printf(cur_line);
-				//printf("\n");
-			}
-			input_file.close();
-		}
 
 		void simulate()
 		{
@@ -719,6 +779,12 @@ namespace octet {
 			check_collisions();
 			//remove objects on remove list
 			remove_dead_objects();
+
+			if (exit_flag != sprite_directions::NONE)
+			{
+				go_through_exit(exit_flag);
+				exit_flag = sprite_directions::NONE;
+			}
 		}
 
 		void update()
