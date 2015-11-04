@@ -32,7 +32,8 @@ namespace octet {
 		rock = 3,
 		ground = 4,
 		lock = 5,
-		type_number = 6,
+		boss = 6,
+		type_number = 7,
 	};
 
 	enum sprite_directions {
@@ -283,12 +284,18 @@ namespace octet {
 		texture_shader *shader;
 		mat4t *worldCamera;
 		math::random randomiser;//declared up here so it has a better range of (pseudo-)randomness
+		GLuint font_texture;
+		bitmap_font* text_font;
+		
 		
 		exit_data exits[4];//same enumeration as sprite directions
 		int enemy_count; 
 		sprite* player_sprite;
+		sprite* boss_sprite;
 		sprite_directions exit_flag;//set to direction of exit on request for exit
 
+		bool win_flag;
+		bool lose_flag;
 
 	public:
 
@@ -298,12 +305,13 @@ namespace octet {
 
 		ALuint get_sound_source() { return sound_sources[cur_sound_source++ % num_sound_sources]; }
 
-		void init(octet::app* usedApp, texture_shader &texture_shader_, mat4t &cameraToWorld)
+		void init(octet::app* usedApp, texture_shader &texture_shader_, mat4t &cameraToWorld, bitmap_font *font)
 		{
 			
 			myApp = usedApp;
 			shader = &texture_shader_;
 			worldCamera = &cameraToWorld;
+			text_font = font;
 
 			//setting up sprite data
 			//player, enemy, rock, bullet, ground
@@ -317,7 +325,7 @@ namespace octet {
 			sprite_data[enemy].w = 0.25f;
 			sprite_data[enemy]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/enemy.gif");
 			sprite_data[enemy].collides = true;
-			sprite_data[enemy].health = 100;
+			sprite_data[enemy].health = 50;
 
 			sprite_data[rock].h = 0.25f;
 			sprite_data[rock].w = 0.25f;
@@ -339,9 +347,18 @@ namespace octet {
 			sprite_data[lock]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/lock.gif");
 			sprite_data[lock].collides = true;
 
+			sprite_data[boss].h = 0.25f;
+			sprite_data[boss].w = 0.25f;
+			sprite_data[boss]._texture = resource_dict::get_texture_handle(GL_RGBA, "assets/assignment_8_nov/enemy.gif");
+			sprite_data[boss].collides = true;
+			sprite_data[boss].health = 500;
+
 			//...and sounds
 			cur_sound_source = 0;
 			alGenSources(num_sound_sources, sound_sources);
+
+			//and text
+			font_texture = resource_dict::get_texture_handle(GL_RGBA, "assets/big_0.gif");
 
 			//and misc
 			time_t now = time(0);
@@ -349,7 +366,10 @@ namespace octet {
 			randomiser.set_seed(now_i);
 			enemy_count = 0;
 			player_sprite = NULL;
+			boss_sprite = NULL;
 			exit_flag = sprite_directions::NONE;
+			win_flag = false;
+			lose_flag = false;
 
 			//draws ground, loads objects
 			load_map_from_csv("../assets/assignment_8_nov/stage1.csv");
@@ -383,6 +403,7 @@ namespace octet {
 					else background_sprites.push_back(cur_sprite);
 					if (type == sprite_types::enemy) ++enemy_count;
 					else if (type == sprite_types::player) player_sprite = &contained_sprites[cur_sprite];
+					else if (type == sprite_types::boss) boss_sprite = &contained_sprites[cur_sprite];
 					break;
 				}
 			cur_sprite++;
@@ -458,7 +479,7 @@ namespace octet {
 		
 		bool load_map_from_csv(std::string file_path)
 		{
-			add_sprite_by_type(sprite_types::ground, 0.0f, 0.0f);
+			//add_sprite_by_type(sprite_types::ground, 0.0f, 0.0f);
 			for (int i = 0; i < 4; ++i) {
 				exits[i].leads_to = "NULL";
 				exits[i].new_x = 0.0f;
@@ -513,6 +534,7 @@ namespace octet {
 							if (cur_data == "R") cur_type = sprite_types::rock;
 							else if (cur_data == "L") cur_type = sprite_types::lock;
 							else if (cur_data == "E") cur_type = sprite_types::enemy;
+							else if (cur_data == "B") cur_type = sprite_types::boss;
 							if (cur_type != sprite_types::type_null) add_sprite_by_type(cur_type, (cur_x * TILE_WIDTH) + MAP_X_OFFSET, (cur_y * TILE_WIDTH) + MAP_Y_OFFSET);
 						}
 						cur_data.clear();
@@ -542,6 +564,39 @@ namespace octet {
 			return true;
 		}
 
+		void draw_text(texture_shader &shader, float x, float y, float scale, const char *text) {
+			mat4t modelToWorld;
+			modelToWorld.loadIdentity();
+			modelToWorld.translate(x, y, 0);
+			modelToWorld.scale(scale, scale, 1);
+			mat4t modelToProjection = mat4t::build_projection_matrix(modelToWorld, *worldCamera);
+
+			/*mat4t tmp;
+			glLoadIdentity();
+			glTranslatef(x, y, 0);
+			glGetFloatv(GL_MODELVIEW_MATRIX, (float*)&tmp);
+			glScalef(scale, scale, 1);
+			glGetFloatv(GL_MODELVIEW_MATRIX, (float*)&tmp);*/
+
+			enum { max_quads = 32 };
+			bitmap_font::vertex vertices[max_quads * 4];
+			uint32_t indices[max_quads * 6];
+			aabb bb(vec3(0, 0, 0), vec3(256, 256, 0));
+
+			unsigned num_quads = text_font->build_mesh(bb, vertices, indices, max_quads, text, 0);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, font_texture);
+
+			shader.render(modelToProjection, 0);
+
+			glVertexAttribPointer(attribute_pos, 3, GL_FLOAT, GL_FALSE, sizeof(bitmap_font::vertex), (void*)&vertices[0].x);
+			glEnableVertexAttribArray(attribute_pos);
+			glVertexAttribPointer(attribute_uv, 3, GL_FLOAT, GL_FALSE, sizeof(bitmap_font::vertex), (void*)&vertices[0].u);
+			glEnableVertexAttribArray(attribute_uv);
+
+			glDrawElements(GL_TRIANGLES, num_quads * 6, GL_UNSIGNED_INT, indices);
+		}
+
 		void render()
 		{
 			std::list<int>::iterator sprite_iterator = background_sprites.begin();
@@ -555,6 +610,24 @@ namespace octet {
 			{
 				contained_sprites[*sprite_iterator].render(*shader, *worldCamera);
 				sprite_iterator++;
+			}
+			if (player_sprite != NULL)
+			{
+				char cur_text[32];
+				sprintf(cur_text,"HP: %d",player_sprite->health);
+				draw_text(*shader, -1.75f, 2, 1.0f / 256, cur_text);
+			}
+			if (boss_sprite != NULL)
+			{
+				char boss_text[32];
+				sprintf(boss_text, "Boss HP: %d", boss_sprite->health);
+				draw_text(*shader, 2.0f, 2, 1.0f / 256, boss_text);
+			}
+			if (win_flag) {
+				draw_text(*shader, 0.5f, -0.75f, 1.0f / 256, "VICTORY!");
+			}
+			if (lose_flag) {
+				draw_text(*shader, 0.5f, -0.75f, 1.0f / 256, "GAME OVER!");
 			}
 		}
 
@@ -602,9 +675,9 @@ namespace octet {
 						break;
 					}
 				}
-				/*if (myApp->is_key_going_down(key_ctrl)) {
-					playSound("assets/invaderers/bang.wav");
-				}*/
+				if (myApp->is_key_going_down(key_ctrl)) {
+					object.health -= 100;
+				}
 
 				if (object.getX() > 3.0f || object.getX() < -3.0f || object.getY() > 3.0f || object.getY() < -3.0f)
 				{
@@ -613,6 +686,7 @@ namespace octet {
 					if (object.getY() > 3.0f) exit_flag = sprite_directions::UP;
 					else if (object.getY() < -3.0f) exit_flag = sprite_directions::DOWN;
 				}
+				if (object.health <= 0) lose_flag = true;
 			}
 			else if (object.get_type() == sprite_types::enemy) {
 				switch (object.facing){
@@ -647,10 +721,7 @@ namespace octet {
 				if (object.facing == sprite_directions::DOWN) object.translate(0, -BULLET_SPEED);
 				if (object.facing == sprite_directions::LEFT) object.translate(-BULLET_SPEED, 0);
 				if (object.facing == sprite_directions::RIGHT) object.translate(BULLET_SPEED, 0);
-				if (object.getX() < -3.0f || object.getX() > 3.0f || object.getY() > 3.0f || object.getY() < -3.0f)
-				{
-					removal_list.push_back(&object);
-				}
+				if (object.getX() < -3.0f || object.getX() > 3.0f || object.getY() > 3.0f || object.getY() < -3.0f) removal_list.push_back(&object);
 			}
 			else if (object.get_type() == sprite_types::lock) {
 				if (enemy_count == 0) removal_list.push_back(&object);
@@ -680,6 +751,8 @@ namespace octet {
 			//note: subject is always the thing ACTING UPON the object
 			//that is, the properties of the subject NEVER change
 			//this just keeps things organised
+			//also; objects never remove one another directly -- they always add one another to the removal list
+			//this is to prevent problems with ordering objects / multiple collisions
 			if (subject.get_type() == sprite_types::rock)
 			{
 				if(object.get_type() == sprite_types::bullet) removal_list.push_back(&object);
@@ -692,10 +765,13 @@ namespace octet {
 			}
 			else if (subject.get_type() == sprite_types::bullet)
 			{
-				if (object.get_type() == sprite_types::enemy)
+				if (object.get_type() == sprite_types::enemy || object.get_type() == sprite_types::boss)
 				{
 					object.health -= 10;
-					if (object.health <= 0) removal_list.push_back(&object);
+					if (object.health <= 0) {
+						removal_list.push_back(&object);
+						if (object.get_type() == sprite_types::boss) win_flag = true;
+					}
 				}
 			}
 			else if (subject.get_type() == sprite_types::enemy)
@@ -717,6 +793,7 @@ namespace octet {
 				}
 				if (object.get_type() == sprite_types::player)
 				{
+					object.health -= 1;
 					object.separateFrom(subject);
 				}
 			}
@@ -740,6 +817,9 @@ namespace octet {
 					//i.e. move it back to its previous location
 					if (object.get_type() == sprite_types::enemy) turn_enemy(object);
 				}
+			}
+			else if (subject.get_type() == sprite_types::boss) {
+				if (object.get_type() == sprite_types::bullet) removal_list.push_back(&object);
 			}
 		}
 
@@ -770,7 +850,6 @@ namespace octet {
 			}
 		}
 
-
 		void simulate()
 		{
 			//move objects
@@ -789,7 +868,7 @@ namespace octet {
 
 		void update()
 		{
-			simulate();
+			if(!win_flag && !lose_flag)	simulate();
 			render();
 		}
 
@@ -805,45 +884,13 @@ namespace octet {
 
 		game_manager manager;
 
-
 		// a texture for our text
 		GLuint font_texture;
 
 		// information for our text
 		bitmap_font font;
 
-		void draw_text(texture_shader &shader, float x, float y, float scale, const char *text) {
-			mat4t modelToWorld;
-			modelToWorld.loadIdentity();
-			modelToWorld.translate(x, y, 0);
-			modelToWorld.scale(scale, scale, 1);
-			mat4t modelToProjection = mat4t::build_projection_matrix(modelToWorld, cameraToWorld);
-
-			/*mat4t tmp;
-			glLoadIdentity();
-			glTranslatef(x, y, 0);
-			glGetFloatv(GL_MODELVIEW_MATRIX, (float*)&tmp);
-			glScalef(scale, scale, 1);
-			glGetFloatv(GL_MODELVIEW_MATRIX, (float*)&tmp);*/
-
-			enum { max_quads = 32 };
-			bitmap_font::vertex vertices[max_quads * 4];
-			uint32_t indices[max_quads * 6];
-			aabb bb(vec3(0, 0, 0), vec3(256, 256, 0));
-
-			unsigned num_quads = font.build_mesh(bb, vertices, indices, max_quads, text, 0);
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, font_texture);
-
-			shader.render(modelToProjection, 0);
-
-			glVertexAttribPointer(attribute_pos, 3, GL_FLOAT, GL_FALSE, sizeof(bitmap_font::vertex), (void*)&vertices[0].x);
-			glEnableVertexAttribArray(attribute_pos);
-			glVertexAttribPointer(attribute_uv, 3, GL_FLOAT, GL_FALSE, sizeof(bitmap_font::vertex), (void*)&vertices[0].u);
-			glEnableVertexAttribArray(attribute_uv);
-
-			glDrawElements(GL_TRIANGLES, num_quads * 6, GL_UNSIGNED_INT, indices);
-		}
+		
 
 	public:
 
@@ -862,36 +909,9 @@ namespace octet {
 			cameraToWorld.loadIdentity();
 			cameraToWorld.translate(0, 0, 3);
 
-			manager.init(this, texture_shader_, cameraToWorld);
-
-			font_texture = resource_dict::get_texture_handle(GL_RGBA, "assets/big_0.gif");
+			manager.init(this, texture_shader_, cameraToWorld, &font);
 
 			manager.add_sprite_by_type(sprite_types::player, 0, 0);
-
-			//level = 23x23 grid
-			//top
-			//for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, i, 2.75f);
-			//bottom
-			//for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, i, -2.75f);
-			//left
-			//for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, 2.75f, i);
-			//right
-			//for (float i = -2.75f; i <= 2.75f; i += 0.25f) manager.add_sprite_by_type(sprite_types::rock, -2.75f, i);
-
-			/*for (float x = -2.75f; x <= 2.75f; x += 0.25f)
-			{
-				for (float y = -2.75f; y <= 2.75f; y += 0.25f)
-				{
-					manager.add_sprite_by_type(sprite_types::ground, x, y);
-				}
-			}*/
-			/*manager.add_sprite_by_type(sprite_types::enemy, 0, -1.75f);
-			manager.add_sprite_by_type(sprite_types::enemy, -1.75f, -1.75f);
-			manager.add_sprite_by_type(sprite_types::enemy, 1.75f, 1.75f);
-			manager.add_sprite_by_type(sprite_types::enemy, 0, 1.75f);
-			manager.add_sprite_by_type(sprite_types::enemy, 1, 1.75f);
-			manager.add_sprite_by_type(sprite_types::enemy, 0.5f, -0.5f);*/
-			//manager.add_sprite_by_type(sprite_types::enemy, -1.75f, -1.75f);
 		}
 
 		// called every frame to move things
@@ -901,12 +921,13 @@ namespace octet {
 
 		// this is called to draw the world
 		void draw_world(int x, int y, int w, int h) {
-			simulate();
+			//simulate();
 			// set a viewport - includes whole window area
 			glViewport(x, y, w, h);
 
-			// clear the background to black
-			glClearColor(0, 0, 0, 1);
+			// clear the background to a nice color
+			// rgb thing
+			glClearColor(0.125, 0.125, 0.2, 1);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 			// don't allow Z buffer depth testing (closer objects are always drawn in front of far ones)
@@ -916,8 +937,10 @@ namespace octet {
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-			// draw all the sprites
-			manager.render();
+			// draw all the sprites, etc.
+			manager.update();
+
+			//draw_text(texture_shader_, -1.75f, 2, 1.0f / 256, "drawn");
 
 			// move the listener with the camera
 			vec4 &cpos = cameraToWorld.w();
