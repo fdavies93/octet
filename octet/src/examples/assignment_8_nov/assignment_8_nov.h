@@ -89,7 +89,7 @@ namespace octet {
 			enabled = true;
 		}
 
-		void render(texture_shader &shader, mat4t &cameraToWorld) {
+		void render(assignment_shader &shader, mat4t &cameraToWorld) {
 			// invisible sprite... used for gameplay.
 			if (!texture) return;
 
@@ -302,7 +302,7 @@ namespace octet {
 		std::list<int> colliding_sprites;
 		std::list<int> background_sprites;
 		std::vector<sprite*> removal_list;
-		texture_shader *shader;
+		assignment_shader *shader;
 		mat4t *worldCamera;
 		math::random randomiser;//declared up here so it has a better range of (pseudo-)randomness
 		GLuint font_texture;
@@ -326,7 +326,7 @@ namespace octet {
 
 		ALuint get_sound_source() { return sound_sources[cur_sound_source++ % num_sound_sources]; }
 
-		void init(octet::app* usedApp, texture_shader &texture_shader_, mat4t &cameraToWorld, bitmap_font *font)
+		void init(octet::app* usedApp, assignment_shader &texture_shader_, mat4t &cameraToWorld, bitmap_font *font)
 		{
 			
 			myApp = usedApp;
@@ -589,7 +589,7 @@ namespace octet {
 			return true;
 		}
 
-		void draw_text(texture_shader &shader, float x, float y, float scale, const char *text) {
+		void draw_text(assignment_shader &shader, float x, float y, float scale, const char *text) {
 			mat4t modelToWorld;
 			modelToWorld.loadIdentity();
 			modelToWorld.translate(x, y, 0);
@@ -971,7 +971,7 @@ namespace octet {
 		mat4t cameraToWorld;
 
 		// shader to draw a textured triangle
-		texture_shader texture_shader_;
+		assignment_shader texture_shader_;
 
 		game_manager manager;
 
