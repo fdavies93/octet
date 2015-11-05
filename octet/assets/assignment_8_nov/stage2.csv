@@ -1,6 +1,6 @@
 ../assets/assignment_8_nov/stage1.csv,2.25,0,NULL,1,1,../assets/assignment_8_nov/bossroom.csv,0,-2.25,NULL,1,1,,,,,,,,,,,,,
-R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R
-R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R
+R,R,R,R,R,R,R,R,R,R,R,R,L,L,R,R,R,R,R,R,R,R,R,R,R
+R,R,R,R,R,R,R,R,R,R,R,R,L,L,R,R,R,R,R,R,R,R,R,R,R
 R,R,,,,,,,,,,,,,,,,,,,,,,R,R
 R,R,,,,,,,,,,,,,,,,,,,,,,R,R
 R,R,,,,,,,,,,,,,,,,,,,,,,R,R
@@ -22,5 +22,5 @@ R,R,,,,,,,,,,,,,,,,,,,,,,R,R
 R,R,,,,,,,,,,,,,,,,,,,,,,R,R
 R,R,,,,,,,,,,,,,,,,,,,,,,R,R
 R,R,,,,,,,,,,,,,,,,,,,,,,R,R
-R,R,R,R,R,R,R,R,R,R,R,R,L,L,R,R,R,R,R,R,R,R,R,R,R
-R,R,R,R,R,R,R,R,R,R,R,R,L,L,R,R,R,R,R,R,R,R,R,R,R
+R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R
+R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R

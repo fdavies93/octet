@@ -291,7 +291,7 @@ namespace octet {
 		const float ENEMY_TURN_CHANCE = 0.05f;//a percentage
 		const float TILE_WIDTH = 0.25f;//i.e. 32 pixels
 		const float MAP_X_OFFSET = -3.0f;
-		const float MAP_Y_OFFSET = -3.0f;
+		const float MAP_Y_OFFSET = 3.0f;
 
 		octet::app* myApp;
 		sprite dummy;
@@ -561,7 +561,7 @@ namespace octet {
 							else if (cur_data == "L") cur_type = sprite_types::lock;
 							else if (cur_data == "E") cur_type = sprite_types::enemy;
 							else if (cur_data == "B") cur_type = sprite_types::boss;
-							if (cur_type != sprite_types::type_null) add_sprite_by_type(cur_type, (cur_x * TILE_WIDTH) + MAP_X_OFFSET, (cur_y * TILE_WIDTH) + MAP_Y_OFFSET);
+							if (cur_type != sprite_types::type_null) add_sprite_by_type(cur_type, (cur_x * TILE_WIDTH) + MAP_X_OFFSET, -(cur_y * TILE_WIDTH) + MAP_Y_OFFSET);
 						}
 						cur_data.clear();
 						++cur_x;
